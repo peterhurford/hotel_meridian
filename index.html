@@ -1,0 +1,1646 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Hotel Meridian</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Limelight&family=Spectral:ital,wght@0,400;0,600;1,400&family=DM+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: full-screen game. HUD bar on top, hotel map stage on the left, "overheard" log on the right (stacks below on phones).
+   One committed dark look; the UI chrome re-tints when the player crosses into the Shadow. */
+:root{
+  color-scheme: dark;
+  --ink:#0c1716;
+  --panel:#12211f;
+  --line:#2a433f;
+  --gold:#d6b25e;
+  --text:#ece3cf;
+  --muted:#9db0a8;
+  --accent:#d6b25e;
+  --whisper:#b4a8ea;
+  --danger:#d0566a;
+  --font-display:"Limelight", Didot, Georgia, serif;
+  --font-body:"Spectral", Georgia, "Times New Roman", serif;
+  --font-mono:"DM Mono", ui-monospace, Menlo, monospace;
+}
+body.shadow{
+  --ink:#0a090f;
+  --panel:#15131d;
+  --line:#353048;
+  --text:#d9d6e6;
+  --muted:#8f8aa6;
+  --accent:#b4a8ea;
+}
+[hidden]{display:none!important}
+html,body{height:100%}
+body{margin:0;background:var(--ink);color:var(--text);font-family:var(--font-body);font-size:15px;overflow:hidden;transition:background-color .6s}
+#app{height:100%;display:flex;flex-direction:column}
+button{font:inherit;color:var(--text);background:transparent;border:1px solid var(--line);border-radius:3px;padding:6px 11px;cursor:pointer;transition:border-color .2s,background-color .2s}
+button:hover{border-color:var(--accent)}
+button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+kbd{font-family:var(--font-mono);font-size:.8em;border:1px solid var(--line);border-bottom-width:2px;border-radius:3px;padding:0 5px;color:var(--text)}
+
+#hud{display:flex;align-items:center;gap:10px 14px;flex-wrap:wrap;padding:8px 16px;border-bottom:1px solid var(--line);background:var(--panel);transition:background-color .6s}
+.brand{font-family:var(--font-display);color:var(--accent);font-size:21px;letter-spacing:.05em;white-space:nowrap}
+#clockBox{display:flex;flex-direction:column;line-height:1.05;min-width:86px}
+#clock{font-family:var(--font-mono);font-size:22px;font-variant-numeric:tabular-nums;letter-spacing:-.02em}
+#where{font-size:11px;color:var(--muted);letter-spacing:.12em;text-transform:uppercase}
+#worldBtn{font-family:var(--font-display);letter-spacing:.06em;min-width:118px}
+#worldBtn.sun{color:#f3d58a;border-color:#6b5a2e;background:rgba(214,178,94,.08)}
+#worldBtn.shadow{color:var(--whisper);border-color:#4b4370;background:rgba(150,130,220,.08)}
+#night{font-size:13px;color:var(--muted);letter-spacing:.1em;text-transform:uppercase;white-space:nowrap}
+.spacer{flex:1}
+#inv{display:flex;gap:6px;flex-wrap:wrap}
+.chip{font-size:12.5px;border:1px solid var(--line);border-radius:999px;padding:3px 10px;color:var(--text);white-space:nowrap}
+.chip.ok{border-color:#7d6a32;color:#f0d791}
+#ffBtn.on,#mapBtn.on{background:rgba(214,178,94,.16);border-color:var(--accent)}
+#journalBtn{position:relative}
+#newDot{position:absolute;top:-4px;right:-4px;width:9px;height:9px;border-radius:50%;background:var(--danger)}
+
+#main{flex:1;display:flex;min-height:0}
+#stage{flex:1;position:relative;min-width:0;overflow:hidden}
+#cv{position:absolute;inset:0;width:100%;height:100%;display:block;touch-action:none;cursor:pointer}
+#side{width:300px;border-left:1px solid var(--line);background:var(--panel);display:flex;flex-direction:column;min-height:0;transition:background-color .6s}
+#side h2{font-family:var(--font-display);font-weight:400;font-size:14px;letter-spacing:.12em;color:var(--accent);margin:0;padding:12px 16px 6px;text-transform:uppercase}
+#log{list-style:none;margin:0;padding:4px 16px 16px;overflow-y:auto;flex:1;font-size:13.5px;line-height:1.4;display:flex;flex-direction:column;gap:7px}
+#log li{min-width:0}
+#log .t{font-family:var(--font-mono);font-size:11px;color:var(--muted);margin-right:6px}
+#log .who{font-weight:600}
+#log li.w{color:var(--whisper);font-style:italic}
+#log li.act{color:var(--muted);font-style:italic}
+#log .empty{color:var(--muted);font-style:italic}
+
+#promptEl{position:absolute;left:50%;bottom:14px;transform:translateX(-50%);background:rgba(8,10,10,.82);border:1px solid var(--line);padding:6px 12px;border-radius:3px;font-size:14px;pointer-events:none;white-space:nowrap}
+#toasts{position:absolute;left:12px;top:12px;display:flex;flex-direction:column;gap:6px;pointer-events:none;max-width:min(380px,calc(100% - 24px))}
+.toast{background:rgba(10,12,12,.9);border:1px solid var(--accent);color:var(--text);padding:7px 12px;border-radius:3px;font-size:13.5px;animation:tin .3s ease-out}
+.toast b{color:var(--accent);font-weight:600}
+@keyframes tin{from{transform:translateY(-6px);opacity:0}to{transform:none;opacity:1}}
+
+#dialog{position:absolute;left:50%;bottom:16px;transform:translateX(-50%);width:min(660px,calc(100% - 32px));background:rgba(14,22,21,.96);border:1px solid #6b5a2e;border-radius:4px;padding:14px 16px;display:grid;grid-template-columns:56px 1fr;gap:4px 14px;box-shadow:0 10px 40px rgba(0,0,0,.5);max-height:70%;overflow-y:auto}
+#dialog.shadowmode{background:rgba(20,17,30,.96);border-color:#4b4370}
+#dlgPortrait{grid-row:span 3;width:56px;height:56px}
+#dlgWho{font-family:var(--font-display);color:var(--accent);font-size:16px;letter-spacing:.04em}
+#dlgText{font-size:15.5px;line-height:1.5;min-width:0}
+#dlgText p{margin:0 0 .5em}
+#dlgText em{color:var(--muted)}
+#dialog.shadowmode #dlgText{color:var(--whisper);font-style:italic}
+#dlgOpts{display:flex;flex-direction:column;gap:6px;margin-top:6px}
+#dlgOpts button{text-align:left}
+#dlgOpts button .n{font-family:var(--font-mono);color:var(--muted);margin-right:8px;font-size:12px}
+
+#touchBar{position:absolute;right:12px;bottom:12px;display:none;gap:8px}
+#touchBar button{background:rgba(10,12,12,.85);padding:12px 14px}
+@media (pointer:coarse){#touchBar{display:flex}#promptEl{bottom:70px}}
+
+.overlay{position:fixed;inset:0;background:rgba(5,8,8,.86);display:flex;align-items:center;justify-content:center;padding:16px;z-index:10;overflow-y:auto}
+.card{width:min(680px,100%);max-height:100%;overflow-y:auto;background:var(--panel);border:1px solid #6b5a2e;border-radius:4px;padding:26px 28px;box-sizing:border-box}
+.card h1{font-family:var(--font-display);font-weight:400;color:var(--accent);font-size:clamp(34px,7vw,54px);margin:0;letter-spacing:.04em;line-height:1;text-wrap:balance}
+.card h2{font-family:var(--font-display);font-weight:400;color:var(--accent);font-size:26px;margin:0 0 6px;text-wrap:balance}
+.card h3{font-family:var(--font-display);font-weight:400;font-size:14px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin:20px 0 8px}
+.card p{line-height:1.6;max-width:62ch;margin:0 0 .8em}
+.eyebrow{font-size:12px;letter-spacing:.2em;text-transform:uppercase;color:var(--muted);margin:10px 0 18px}
+.keys{display:grid;grid-template-columns:auto 1fr;gap:6px 14px;font-size:14px;align-items:baseline}
+.row{display:flex;gap:10px;flex-wrap:wrap;margin-top:18px}
+.primary{background:var(--gold);color:#16120a;border-color:var(--gold);font-weight:600}
+.primary:hover{background:#e7c677}
+.danger{border-color:#6a2b35;color:#f0a3ae}
+.tabs{display:flex;gap:6px;flex-wrap:wrap;margin:14px 0 6px}
+.tabs button[aria-selected="true"]{border-color:var(--accent);color:var(--accent)}
+.leads{margin:0;padding-left:20px;line-height:1.55}
+.leads li{margin-bottom:6px}
+.cl-group{margin-bottom:12px}
+.cl-group ul{margin:0;padding-left:18px;line-height:1.5}
+.cl-group li{margin-bottom:4px}
+.cl-group .lp{font-family:var(--font-mono);font-size:11px;color:var(--muted)}
+.cast{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:10px}
+.cast div{border-left:2px solid var(--line);padding-left:10px;font-size:14px;line-height:1.4;min-width:0}
+.cast b{display:block;color:var(--text)}
+.outcome{white-space:pre-line}
+
+@media (max-width:760px){
+  #main{flex-direction:column}
+  #side{width:auto;height:132px;border-left:0;border-top:1px solid var(--line)}
+  .brand{display:none}
+  #hud{padding:8px 12px;gap:8px}
+  #inv{order:9;width:100%}
+  .card{padding:20px 18px}
+}
+@media (prefers-reduced-motion:reduce){.toast{animation:none}body{transition:none}}
+</style>
+</head>
+<body>
+<div id="app">
+  <header id="hud">
+    <div class="brand">Hotel Meridian</div>
+    <div id="clockBox"><span id="clock">8:00 PM</span><span id="where">Room 7</span></div>
+    <button id="worldBtn" class="sun" title="Switch worlds (Space)">☀ Sun</button>
+    <span id="night">Night 1</span>
+    <div class="spacer"></div>
+    <div id="inv"></div>
+    <button id="mapBtn" title="Toggle the whole-hotel map (M)">Map</button>
+    <button id="ffBtn" title="Hurry time along (hold T, or click to toggle)">⏩ Hurry</button>
+    <button id="journalBtn" title="Journal (J)">Journal<span id="newDot" hidden></span></button>
+  </header>
+  <div id="main">
+    <div id="stage">
+      <canvas id="cv"></canvas>
+      <div id="toasts"></div>
+      <div id="promptEl" hidden></div>
+      <div id="dialog" hidden>
+        <canvas id="dlgPortrait" width="112" height="112"></canvas>
+        <div id="dlgWho"></div>
+        <div id="dlgText"></div>
+        <div id="dlgOpts"></div>
+      </div>
+      <div id="touchBar">
+        <button id="tE">Interact</button>
+        <button id="tW">Switch</button>
+        <button id="tF">Hurry</button>
+      </div>
+    </div>
+    <aside id="side">
+      <h2>Overheard tonight</h2>
+      <ol id="log"></ol>
+    </aside>
+  </div>
+</div>
+
+<div id="titleScreen" class="overlay">
+  <div class="card">
+    <h1>Hotel Meridian</h1>
+    <div class="eyebrow">Midsummer Gala · 21 June 1929 · 8:00 PM to midnight</div>
+    <p>You wake in Room 7 of the Hotel Meridian with no name in the register and a note on the nightstand, in your own handwriting: <em>Stop the midnight toast.</em></p>
+    <p>At midnight, the night ends badly, and the hotel rolls back to eight o'clock. You keep what you've learned. Nobody else does.</p>
+    <p>The hotel has two faces. In the <b style="color:#f3d58a">Sun</b> it is gilded and alive: people see you, talk to you, and you can pick things up. In the <b style="color:#b4a8ea">Shadow</b> it is the same hotel, rotted and broken: no one can see you, so you hear their private words and their thoughts. Some walls have crumbled there, and some halls are choked with rubble.</p>
+    <h3>Controls</h3>
+    <div class="keys">
+      <span><kbd>WASD</kbd> / <kbd>↑↓←→</kbd> / click</span><span>Walk (click a person or object to walk over and use it)</span>
+      <span><kbd>E</kbd></span><span>Talk, examine, or read thoughts</span>
+      <span><kbd>Space</kbd></span><span>Switch between Sun and Shadow</span>
+      <span><kbd>T</kbd> (hold) / <kbd>F</kbd></span><span>Hurry time along / toggle hurry</span>
+      <span><kbd>M</kbd></span><span>Toggle between a close view and the whole hotel</span>
+      <span><kbd>J</kbd></span><span>Journal: clues, leads, and rewinding the night</span>
+    </div>
+    <div class="row" id="titleButtons"></div>
+  </div>
+</div>
+
+<div id="midnight" class="overlay" hidden>
+  <div class="card">
+    <h2 id="mTitle">Midnight</h2>
+    <div class="eyebrow" id="mEyebrow"></div>
+    <p id="mText" class="outcome"></p>
+    <div class="row" id="mButtons"></div>
+  </div>
+</div>
+
+<div id="journal" class="overlay" hidden>
+  <div class="card">
+    <h2>Journal</h2>
+    <div class="eyebrow" id="jSub"></div>
+    <div class="tabs" role="tablist">
+      <button role="tab" data-tab="leads" aria-selected="true">Leads</button>
+      <button role="tab" data-tab="clues" aria-selected="false">Clues</button>
+      <button role="tab" data-tab="cast" aria-selected="false">Guests &amp; staff</button>
+      <button role="tab" data-tab="help" aria-selected="false">How it works</button>
+    </div>
+    <div id="jBody"></div>
+    <div class="row">
+      <button class="primary" id="jClose">Back to the hotel</button>
+      <button id="jRewind">Rewind to 8:00 PM</button>
+      <button class="danger" id="jForget">Forget everything</button>
+    </div>
+  </div>
+</div>
+
+<script>
+'use strict';
+// ============================================================ constants
+const T = 24, W = 44, H = 28;          // tile px, map size in tiles
+const SEC_PER_MIN = 1.5;               // real seconds per game minute
+const HURRY = 7;                       // time multiplier while hurrying
+const END = 240;                       // minutes from 8:00 PM to midnight
+const PLAYER_SPEED = 4.6;              // tiles per real second
+const NPC_SPEED = 4;                   // tiles per game minute
+const REACH = 1.75;                    // interaction distance in tiles
+const SAVE_KEY = 'hotel-meridian-v1';
+
+// ============================================================ map
+const ROOMS = {
+  study:       {n:'Study',        r:[1,1,9,8],    f:'wood'},
+  ballroom:    {n:'Ballroom',     r:[11,1,26,8],  f:'parquet'},
+  conservatory:{n:'Conservatory', r:[28,1,34,8],  f:'terracotta'},
+  suite:       {n:'Ashby Suite',  r:[36,1,42,8],  f:'carpet'},
+  hall:        {n:'Grand Hall',   r:[1,10,42,11], f:'runner'},
+  infirmary:   {n:'Infirmary',    r:[1,13,9,19],  f:'clinic'},
+  lobby:       {n:'Lobby',        r:[11,13,19,22],f:'marble'},
+  bar:         {n:'Bar',          r:[21,13,28,19],f:'barcarpet'},
+  kitchen:     {n:'Kitchen',      r:[30,13,36,19],f:'ktile'},
+  pantry:      {n:'Pantry',       r:[38,13,42,19],f:'ptile'},
+  room7:       {n:'Room 7',       r:[1,21,9,26],  f:'navy'},
+  linen:       {n:'Linen Room',   r:[21,21,28,26],f:'boards'},
+  cellar:      {n:'Wine Cellar',  r:[30,21,42,26],f:'stone'},
+};
+const FLOORS = {
+  wood:{t:'planks',c:['#5a3a24','#4b301d']}, parquet:{t:'parquet',c:['#b07a3e','#9a6631']},
+  terracotta:{t:'check',c:['#b9694a','#a85c40']}, carpet:{t:'carpet',c:['#1e6062','#18514f']},
+  runner:{t:'runner',c:['#7a1f2c','#d6b25e','#3a2a22']}, clinic:{t:'check',c:['#cfe0d2','#bcd0c2']},
+  marble:{t:'marble',c:['#e8dfcf','#1f4743']}, barcarpet:{t:'carpet',c:['#5e1824','#4f1320']},
+  ktile:{t:'check',c:['#dedbd2','#3f6c8b']}, ptile:{t:'check',c:['#d1c9b6','#bfb59f']},
+  navy:{t:'carpet',c:['#24315c','#1d2850']}, boards:{t:'planks',c:['#8a6a48','#78593a']},
+  stone:{t:'stone',c:['#5f584d','#4e483f']},
+};
+const DOORS  = [[5,9],[15,9],[16,9],[22,9],[31,9],[5,12],[15,12],[16,12],[24,12],[33,12],[37,16],[29,16],[20,16],[10,22],[24,20],[20,22],[33,20]];
+const LOCKED = [[39,9]];                                   // Ashby's suite: only she has the key
+const HOLES  = [[10,4],[10,16],[35,4]];                    // wall in the Sun, crumbled open in the Shadow
+const RUBBLE = [[20,10],[20,11],[18,4],[19,4],[18,5],[19,5],[13,17],[14,17],[31,15]]; // floor in the Sun, rubble in the Shadow
+
+const grid = [], roomGrid = [];
+for (let y = 0; y < H; y++) { grid.push(Array(W).fill('#')); roomGrid.push(Array(W).fill(null)); }
+for (const [id, R] of Object.entries(ROOMS)) {
+  const [x0,y0,x1,y1] = R.r;
+  for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) { grid[y][x] = '.'; roomGrid[y][x] = id; }
+}
+DOORS.forEach(([x,y]) => grid[y][x] = '+');
+LOCKED.forEach(([x,y]) => grid[y][x] = 'L');
+HOLES.forEach(([x,y]) => grid[y][x] = 'h');
+RUBBLE.forEach(([x,y]) => grid[y][x] = 'r');
+
+function passable(x, y, world, npc) {
+  if (x < 0 || y < 0 || x >= W || y >= H) return false;
+  switch (grid[y][x]) {
+    case '.': case '+': return true;
+    case 'L': return !!npc;
+    case 'h': return !npc && world === 'shadow';
+    case 'r': return !!npc || world === 'sun';
+    default: return false;
+  }
+}
+const DIRS = [[1,0],[-1,0],[0,1],[0,-1],[1,1],[1,-1],[-1,1],[-1,-1]];
+function bfs(sx, sy, tx, ty, pass) {
+  if (sx === tx && sy === ty) return [];
+  if (!pass(tx, ty)) return null;
+  const prev = new Int32Array(W*H).fill(-1), start = sy*W+sx, goal = ty*W+tx;
+  const q = [start]; prev[start] = start;
+  for (let h = 0; h < q.length; h++) {
+    const cur = q[h]; if (cur === goal) break;
+    const cx = cur % W, cy = (cur / W) | 0;
+    for (const [dx,dy] of DIRS) {
+      const nx = cx+dx, ny = cy+dy;
+      if (!pass(nx, ny)) continue;
+      if (dx && dy && (!pass(cx+dx, cy) || !pass(cx, cy+dy))) continue; // no corner cutting
+      const ni = ny*W+nx; if (prev[ni] !== -1) continue;
+      prev[ni] = cur; q.push(ni);
+    }
+  }
+  if (prev[goal] === -1) return null;
+  const path = []; for (let c = goal; c !== start; c = prev[c]) path.push([c % W, (c / W) | 0]);
+  return path.reverse();
+}
+const roomAt = (x, y) => (x >= 0 && y >= 0 && x < W && y < H) ? roomGrid[Math.floor(y)][Math.floor(x)] : null;
+
+// ============================================================ people
+const LOOKS = {
+  aug: {name:'Augustin Vale',     role:'Proprietor. Seventy, stubborn, a weak heart.', body:'#545b6c', trim:'#e4ddcc', skin:'#e2b99a', hair:'#f1f0ec', style:'white', acc:'cane'},
+  cel: {name:'Celeste Vale',      role:'His daughter. Sings at the gala.',             body:'#a3203a', trim:'#e8c06a', skin:'#f0c8a8', hair:'#1a1416', style:'bob',   acc:'pearls'},
+  mar: {name:'Dr. Felix Marrow',  role:'House physician. Bad at cards.',               body:'#6a4a2e', trim:'#e9e2d0', skin:'#dcae8c', hair:'#3a2a1e', style:'short', acc:'glasses'},
+  fen: {name:'Mrs. Odile Fenn',   role:'Housekeeper. Thirty years in this house.',     body:'#22222b', trim:'#f2efe6', skin:'#e0b896', hair:'#9a9690', style:'bun',   acc:'apron'},
+  rook:{name:'Rook',              role:'Bellhop. Sixteen. Sees everything.',           body:'#b0302a', trim:'#e0b84a', skin:'#c98e66', hair:'#2a1a10', style:'cap',   acc:'buttons'},
+  ash: {name:'Lady Imogen Ashby', role:'Here to buy the hotel.',                       body:'#1f7a55', trim:'#d9c27a', skin:'#f1d0b5', hair:'#b8862e', style:'wave',  acc:'feather'},
+};
+const SPOTS = {
+  study_desk:[4,3], study_chair:[6,6],
+  b_aug:[17,3], b_stage:[19,2], b_ash:[23,6], b_fenn:[13,6], b_mar:[24,4], b_rook:[12,3], b_cel:[20,3],
+  c_bench:[31,4], c_smoke:[33,6],
+  s_desk:[40,3], h_suite:[38,11], h_inf:[7,11],
+  i_desk:[3,15], i_patient:[7,16], i_cab:[2,14],
+  l_desk:[15,15], l_rook:[18,20], l_bench:[13,19],
+  br_c1:[22,14], br_c3:[25,14], br_ta:[25,17], br_tb:[27,17], br_cel:[22,18],
+  k_rook:[31,18], k_table:[35,18], p_shelf:[40,14], p_ash:[39,15],
+  ce_rack:[38,24], ce_bottom:[33,22], ce_top:[34,22],
+  ln_fold:[24,23], r7_start:[6,24],
+};
+// [start minute, spot, activity]
+const SCHED = {
+  aug: [[0,'study_desk','writing'],[82,'i_patient','checkup'],[105,'br_ta','business'],[165,'study_desk','brooding'],[221,'b_aug','toast']],
+  cel: [[0,'c_bench','rehearsing'],[18,'study_chair','arguing'],[47,'b_stage','singing'],[102,'c_bench','resting'],[168,'br_cel','drinking'],[222,'b_cel','toast']],
+  mar: [[0,'i_desk','reading'],[60,'br_c3','drinking'],[80,'i_desk','waiting'],[106,'c_smoke','smoking'],[150,'i_desk','alarmed'],[224,'b_mar','toast']],
+  fen: [[0,'ln_fold','folding'],[36,'p_shelf','polishing'],[56,'b_fenn','setting'],[100,'l_desk','desk'],[150,'ln_fold','folding'],[206,'p_shelf','fetching'],[218,'b_fenn','toast']],
+  rook:[[0,'l_rook','post'],[28,'h_suite','luggage'],[44,'l_rook','post'],[100,'h_inf','carrying'],[118,'k_rook','kitchen'],[140,'l_rook','post'],[170,'k_rook','kitchen'],[180,'ce_rack','cellar'],[186,'ce_bottom','returning'],[192,'k_rook','kitchen'],[198,'l_rook','post'],[220,'b_rook','toast']],
+  ash: [[0,'br_c1','drinking'],[55,'b_ash','watching'],[98,'l_bench','waiting'],[106,'i_cab','stealing'],[116,'br_tb','business'],[165,'p_ash','pantry'],[176,'k_table','kitchen'],[182,'ce_top','cellar'],[190,'s_desk','suite'],[218,'b_ash','toast']],
+};
+
+// ============================================================ clues
+const GROUPS = {death:'The midnight toast', glass:'The silver glass', doctor:'The doctor', ashby:'Lady Ashby', rook:'The bellhop', hotel:'The hotel'};
+const CLUES = {
+  NOTE:           ['hotel',  'A note in Room 7, in your own handwriting: "Stop the midnight toast."'],
+  PRESENCE:       ['hotel',  'In the Sun, people see you and change what they do. In the Shadow, no one sees you at all.'],
+  SUITE_HOLE:     ['hotel',  "In the Shadow, the wall between the Conservatory and Ashby's locked suite has crumbled away."],
+  DEATH_TOAST:    ['death',  'At midnight, Augustin Vale drinks the toast in the Ballroom and dies.'],
+  NO_SALE:        ['death',  'Augustin has secretly decided not to sell the hotel. He means to announce it at the midnight toast.'],
+  AUG_PROOF:      ['death',  'Augustin will act only on proof, all in one night: the poison, the forgery, and a witness.'],
+  CONVINCED:      ['death',  'Augustin knows the truth.'],
+  SILVER_GLASS:   ['glass',  "Augustin drinks every toast from his late wife Eleanor's silver-rimmed glass."],
+  GLASS_PANTRY:   ['glass',  'Mrs. Fenn polishes the silver glass around 8:45 and leaves it on the pantry shelf. She fetches it for the toast at 11:30.'],
+  FENN_PLAIN:     ['glass',  'If the silver glass goes missing, Mrs. Fenn will bring Augustin a plain glass instead.'],
+  GLASS_BLACK:    ['glass',  'Seen from the Shadow, the silver glass is black inside. It has been poisoned.'],
+  SAW_POISON:     ['glass',  'Unseen in the Shadow, you watched Lady Ashby tip a brown bottle into the silver glass in the pantry, just before 11:00.'],
+  GLASS_CONFIRMED:['glass',  "Dr. Marrow tested the silver glass: a killing dose of his own digitalis."],
+  FOXGLOVE:       ['doctor', 'Marrow gives Augustin two drops of foxglove (digitalis) for his heart. A whole bottle would stop it.'],
+  MARROW_DEBT:    ['doctor', 'Marrow owes £400 at cards. A motive, on paper.'],
+  FOXGLOVE_STOLEN:['doctor', "Marrow's foxglove was stolen from his cabinet while he was out smoking, between about 9:45 and 10:30."],
+  MARROW_INNOCENT:['doctor', "Marrow's private thoughts are frantic but honest. He didn't take the bottle."],
+  ASHBY_BUYER:    ['ashby',  'Lady Imogen Ashby wants to buy the Meridian and turn it into a casino.'],
+  FORGED:         ['ashby',  "Ashby holds a bill of sale with Augustin's forged signature. If he dies before he can refuse her, it stands."],
+  CONTRACT_SUITE: ['ashby',  'Ashby keeps the forged contract in the writing case in her locked suite.'],
+  GREEN_SILK:     ['ashby',  "In the Shadow, threads of green silk hang from the infirmary cabinet's lock. Lady Ashby wears green."],
+  SAW_THEFT:      ['ashby',  'Just before ten, unseen, you watched Lady Ashby pick the infirmary cabinet and pocket the digitalis.'],
+  ROOK_SAW:       ['rook',   'Rook saw Lady Ashby slip out of the infirmary just before ten. She saw him see her.'],
+  ROOK_ERRAND:    ['rook',   'At 10:58, Lady Ashby sends Rook down to the cellar for a bottle of 1902 Bordeaux.'],
+  ASH_ROOK:       ['rook',   'Ashby, thinking: "The cellar stairs are steep, and boys are clumsy."'],
+  CELLAR_ECHO:    ['rook',   'The Shadow cellar remembers a fall at 11:08, at the foot of the stairs.'],
+  ROOK_DIES:      ['rook',   'Rook dies at the foot of the cellar stairs at 11:08.'],
+  SAW_PUSH:       ['rook',   'Unseen, you watched Lady Ashby push Rook down the cellar stairs.'],
+  ROOK_SAVED:     ['rook',   'Standing in the cellar in the Sun, you stopped Ashby. She will not act while someone can see her.'],
+  ROOK_WITNESS:   ['rook',   'Rook will tell Augustin he saw Lady Ashby leaving the infirmary.'],
+};
+
+// ============================================================ persistent + per-night state
+let P = loadSave();
+function freshSave() { return {clues:{}, loop:1, won:false}; }
+function loadSave() {
+  try { const s = JSON.parse(localStorage.getItem(SAVE_KEY)); if (s && s.clues) return s; } catch (e) {}
+  return freshSave();
+}
+function save() { try { localStorage.setItem(SAVE_KEY, JSON.stringify(P)); } catch (e) {} }
+const has = id => !!P.clues[id];
+
+let S;  // per-night state
+function newNight() {
+  const [sx, sy] = SPOTS.r7_start;
+  S = {
+    t: 0, world: 'sun', trans: null,
+    player: {x: sx+.5, y: sy+.5, path: null, pending: null, phase: 0, moving: false, face: 1},
+    npcs: {}, fired: {}, f: {presented: {}}, log: [], bubbles: [], inv: [],
+    glass: {where: 'pantry', poisoned: false, confirmed: false},
+    contract: {where: 'suite'},
+    ended: false, newClues: 0,
+  };
+  for (const id of Object.keys(SCHED)) {
+    const [x, y] = SPOTS[SCHED[id][0][1]];
+    S.npcs[id] = {id, x: x+.5, y: y+.5, path: [], seg: null, act: SCHED[id][0][2], dead: false, phase: Math.random()*6, moving: false, face: 1};
+  }
+}
+
+// ============================================================ helpers
+const fmtTime = t => {
+  const m = 20*60 + Math.floor(t), h = Math.floor(m/60) % 24, mm = m % 60;
+  const h12 = ((h + 11) % 12) + 1;
+  return `${h12}:${String(mm).padStart(2,'0')} ${h >= 12 && h < 24 ? 'PM' : 'AM'}`;
+};
+const npc = id => S.npcs[id];
+const pRoom = () => roomAt(S.player.x, S.player.y);
+const playerIn = room => pRoom() === room;
+const playerInCellar = () => playerIn('cellar') || (Math.floor(S.player.x) === 33 && Math.floor(S.player.y) === 20);
+const dist = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
+const rookAlive = () => !npc('rook').dead;
+const hasItem = id => S.inv.includes(id);
+const esc = s => s.replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+
+function addClue(id) {
+  if (!CLUES[id] || P.clues[id]) return;
+  P.clues[id] = {loop: P.loop};
+  save();
+  toast(`<b>Journal:</b> ${esc(CLUES[id][1])}`);
+  document.getElementById('newDot').hidden = false;
+  S.newClues++;
+  chime();
+}
+
+function say(who, text, opts = {}) {
+  const action = text.startsWith('*');
+  const whisper = opts.whisper ?? (S.world === 'shadow');
+  const clean = action ? text.replace(/^\*|\*$/g, '') : text;
+  S.bubbles = S.bubbles.filter(b => b.who !== who);
+  S.bubbles.push({who, text: clean, action, whisper, until: performance.now() + Math.max(3500, clean.length * 55)});
+  S.log.push({t: S.t, who, text: clean, action, whisper});
+  renderLog();
+}
+function presence() { addClue('PRESENCE'); }
+
+// ============================================================ scenes (timed conversations)
+// Lines are heard only when the player is inside the room. Private scenes go quiet if the player is there in the Sun.
+const SCENES = [
+  {id:'argument', room:'study', priv:true, t:30, interrupt:['aug',"Ah, a guest! Celeste, we'll finish this later."], lines:[
+    [0,'cel',"Father, you can't sell the Meridian to that woman. She'll gut it for a casino.",'ASHBY_BUYER'],
+    [2.5,'aug',"Little bird. Have I ever once let this house down?"],
+    [5,'cel',"Then tell me you won't sign."],
+    [7.5,'aug',"I'll tell everyone. At midnight, at the toast. Be patient."],
+    [10,'cel',"And you'll drink it from Mother's glass, I suppose. The silver one.",'SILVER_GLASS'],
+    [12.5,'aug',"Every toast for forty years. Go and sing, Celeste."]]},
+  {id:'polish', room:'pantry', t:46, lines:[
+    [0,'fen',"There now. Mr. Vale's silver-rimmed glass, for the midnight toast."],
+    [2.5,'fen',"It waits right here on the shelf till half past eleven. Nobody touches it but me and him.",'GLASS_PANTRY']]},
+  {id:'song', room:'ballroom', t:60, lines:[
+    [0,'cel',"♪ The clock upon the landing has swallowed all its chimes ♪"],
+    [7,'cel',"♪ And every night I meet you here, a hundred thousand times ♪"],
+    [14,'cel',"♪ So pour the wine, my darling, and never mind the hour ♪"],
+    [21,'cel',"♪ The sun is in the ballroom, and the shadow's in the tower ♪"],
+    [30,'cel',"♪ Oh, Meridian, Meridian, don't let the evening end ♪"]]},
+  {id:'checkup', room:'infirmary', priv:true, t:88, interrupt:['mar',"A private consultation, I'm afraid. Would you mind?"], lines:[
+    [0,'mar',"Your pulse is a drunk tap-dancer, Augustin. Two drops of the foxglove."],
+    [2.5,'aug',"And if I drank the whole bottle, Felix?"],
+    [5,'mar',"Then your heart would stop before the glass touched the table. Two drops. No more.",'FOXGLOVE'],
+    [7.5,'aug',"And your debts? Four hundred, I hear.",'MARROW_DEBT'],
+    [10,'mar',"I'll manage. I always manage."],
+    [12.5,'aug',"See that you do. I'll need my friends after midnight."]]},
+  {id:'business', room:'bar', priv:true, t:125, interrupt:['ash',"Business, darling. Run along."], lines:[
+    [0,'ash',"The papers are drawn, Augustin. Sign tonight and the Meridian is mine by morning."],
+    [3,'aug',"You'll have my answer at midnight, Imogen. In front of everyone."],
+    [6,'ash',"How theatrical. And if your answer disappoints me?"],
+    [9,'aug',"Then you'll have had a lovely holiday."],
+    [12,'ash',"*She smiles, and touches the clasp of her handbag.*"],
+    [15,'ash',"Midnight, then. I do love a toast."]]},
+  {id:'alarm', room:'infirmary', t:159, lines:[
+    [0,'mar',"Where's the foxglove? The cabinet's been forced!"],
+    [2.5,'mar',"If anything happens to Vale tonight, they'll hang me for it.",'FOXGLOVE_STOLEN']]},
+  {id:'errand', room:'kitchen', t:178, cond:()=>rookAlive(), lines:[
+    [0,'ash',"Boy. Be a dear and fetch the 1902 Bordeaux from the cellar. For Mr. Vale's toast."],
+    [2,'rook',"Right away, m'lady!",'ROOK_ERRAND']]},
+  {id:'toast', room:'ballroom', t:231, cond:()=>!S.f.convinced, lines:[
+    [0,'aug',"Friends! Forty years ago, my Eleanor and I opened these doors."],
+    [3,'aug',"Tonight I promised an answer about the Meridian's future."],
+    [6,'aug',"Raise your glasses. To the Meridian!"]]},
+  {id:'toast2', room:'ballroom', t:231, cond:()=>S.f.convinced, lines:[
+    [0,'aug',"Friends! Before we drink, I owe Lady Ashby an answer."],
+    [3,'aug',"No, Imogen. And I'll thank you to stay where you are."],
+    [6,'ash',"*Lady Ashby looks for the door. Rook is already standing in it.*"]]},
+];
+
+function runScenes() {
+  const room = pRoom();
+  for (const sc of SCENES) {
+    if (sc.cond && !sc.cond()) continue;
+    sc.lines.forEach((ln, i) => {
+      const key = sc.id + i;
+      if (S.fired[key] || S.t < sc.t + ln[0]) return;
+      S.fired[key] = true;
+      if (room !== sc.room) return;
+      if (sc.priv && S.world === 'sun') {
+        if (!S.fired[sc.id + '_int']) { S.fired[sc.id + '_int'] = true; say(sc.interrupt[0], sc.interrupt[1]); presence(); }
+        return;
+      }
+      if (ln[1] === 'rook' && !rookAlive()) return;
+      say(ln[1], ln[2]);
+      if (ln[3]) addClue(ln[3]);
+    });
+  }
+}
+
+// ============================================================ events (things that change the night)
+function runEvents() {
+  const t = S.t, f = S.f, sun = S.world === 'sun';
+  // 9:53 Ashby steals the digitalis. She can't be stopped, only watched.
+  if (t >= 113 && !f.theft) {
+    f.theft = true;
+    if (playerIn('infirmary')) {
+      if (sun) { say('ash', "Oh! I was looking for the doctor. A headache. Never mind, darling."); presence(); }
+      else { say('ash', "*She works the cabinet lock with a hairpin and pockets a small brown bottle: DIGITALIS.*"); addClue('SAW_THEFT'); }
+    }
+  }
+  // 10:52 to 10:56 Ashby poisons the silver glass, unless someone in the Sun is watching.
+  if (t >= 172 && !f.poisonDone) {
+    const watched = playerIn('pantry') && sun;
+    if (S.glass.where !== 'pantry') {
+      f.poisonDone = true; f.noGlass = true;
+      if (playerIn('pantry')) say('ash', sun ? "Hm. Where has that glass got to? No matter." : "*She searches the empty shelf, and her mouth goes thin.*");
+    } else if (watched) {
+      if (!f.poisonInt) { f.poisonInt = true; say('ash', "Oh! Don't mind me. I was only looking for a little ice."); presence(); }
+      if (t >= 176) { f.poisonDone = true; f.poisonFoiled = true; }
+    } else {
+      f.poisonDone = true; S.glass.poisoned = true;
+      if (playerIn('pantry')) { say('ash', "*She tips a little brown bottle into the silver-rimmed glass, and smiles at nothing.*"); addClue('SAW_POISON'); }
+    }
+  }
+  // 11:05 to 11:08 Ashby pushes Rook down the cellar stairs, unless someone in the Sun is there.
+  if (t >= 185 && !f.pushDone && rookAlive()) {
+    if (playerInCellar() && sun) {
+      f.pushDone = true; f.rookSaved = true;
+      say('ash', "Oh! I didn't see you there. I came down for the... the Bordeaux. Never mind.");
+      presence(); addClue('ROOK_SAVED');
+    } else if (t >= 188) {
+      f.pushDone = true;
+      const r = npc('rook'); r.dead = true; r.path = []; r.x = 33.5; r.y = 22.5;
+      if (playerInCellar()) {
+        say('ash', "*A shove. A cry. A long tumble down the stone steps, and then nothing.*");
+        addClue('SAW_PUSH'); addClue('ROOK_DIES');
+      }
+    }
+  }
+  // 11:34 Fenn fetches the glass for the toast.
+  if (t >= 214 && !f.fennTook) {
+    f.fennTook = true;
+    if (S.glass.where === 'pantry') {
+      S.glass.where = 'fenn';
+      if (playerIn('pantry')) say('fen', "There. The master's glass, for the toast.");
+    } else {
+      f.plainGlass = true;
+      if (playerIn('pantry')) { say('fen', "Where is the master's glass? Lord. A plain one will have to do."); addClue('FENN_PLAIN'); }
+    }
+  }
+  // Seeing the crumbled suite wall from the Shadow.
+  if (!sun && !has('SUITE_HOLE') && Math.hypot(S.player.x - 35.5, S.player.y - 4.5) < 2.6) addClue('SUITE_HOLE');
+  if (t >= END && !S.ended) midnight();
+}
+
+// ============================================================ dialogue content
+const BYE = {label:'Leave', go:()=>null};
+const node = (who, text, options = [], mode = 'sun') => ({who, text, options, mode});
+const back = who => ({label:'Ask something else', go:()=>talkNode(who)});
+const ans = (who, text) => node(who, text, [back(who)]);
+
+const SUN_LINES = {
+  aug: {writing:"Augustin Vale. This has been my hotel for forty years. Enjoying the gala? Be in the ballroom at midnight. I have an announcement.",
+        checkup:"Not now, friend. Felix is listening to my heart, and it's complaining.",
+        business:"Business with Lady Ashby, I'm afraid. Find me later.",
+        brooding:"Nearly midnight. I always feel it in my chest, like a second clock.",
+        toast:"Stay close, friend. Midnight is nearly here."},
+  cel: {rehearsing:"I'm Celeste. The singer, the daughter, and as of midnight, possibly homeless.",
+        arguing:"Not now, please. Family business.",
+        singing:"*She's mid-song, but she winks at you.*",
+        resting:"Do you ever feel you've lived an evening before? Tonight has that taste.",
+        drinking:"Father's been odd all night. Smiling like a man with a secret.",
+        toast:"Here we go. Midnight."},
+  mar: {reading:"Dr. Felix Marrow, house physician. Mostly I treat hangovers and heartbreak. Mostly hangovers.",
+        drinking:"Just the one. Doctor's orders. My own orders.",
+        waiting:"Vale's due for his drops. His heart's a creaky old staircase.",
+        checkup:"Consultation in progress, if you don't mind.",
+        smoking:"Filthy habit. Don't tell my patients.",
+        alarmed:"My foxglove, the whole bottle, gone! Somebody forced the cabinet. If Vale dies tonight, they'll hang me for it.",
+        toast:"To Augustin. Let him live through one more."},
+  fen: {folding:"Mrs. Fenn. Housekeeper. Mind the linen, it's starched.",
+        polishing:"Mr. Vale's glass. It was Mrs. Vale's gift to him. I keep it bright.",
+        setting:"Swans, every napkin. He likes the swans.",
+        desk:"Front desk tonight. That boy is never at his post.",
+        fetching:"Half past eleven. The glass, the tray, the toast.",
+        toast:"God keep him."},
+  rook:{post:"Rook, at your service! Bellhop. Anything you need, I fetch it.",
+        luggage:"Lady Ashby's trunks. Heavy as gravestones!",
+        carrying:"Can't stop, Mrs. Fenn's sheets!",
+        kitchen:"Don't tell Mrs. Fenn about the tart, please.",
+        cellar:"Nineteen-oh-two, nineteen-oh-two... it's dark down here.",
+        returning:"Got it! Mind the stairs.",
+        toast:"Free champagne for the staff after. Maybe."},
+  ash: {drinking:"Imogen Ashby. I'm buying this charming old wreck. By morning it's mine. Isn't that thrilling?",
+        watching:"The daughter sings beautifully. Such a shame about the acoustics in a casino.",
+        waiting:"I'm waiting for someone, darling. It isn't you.",
+        stealing:"Looking for the doctor. A headache. Run along.",
+        business:"Business, darling. Run along.",
+        pantry:"Don't mind me. I was only looking for ice.",
+        kitchen:"Mind that boy, he's terribly clumsy.",
+        cellar:"Oh! Was there something?",
+        suite:"This is a private suite. Out.",
+        toast:"I do love a toast."},
+};
+const THOUGHTS = {
+  aug: {writing:["I can't sell her. Not to that woman. At midnight I'll tell them all: the Meridian stays with the people who made it.",'NO_SALE'],
+        checkup:["Felix is drowning in debt. I'll pay it quietly, after tonight."],
+        business:["Her smile has too many teeth. Say nothing until midnight, old man.",'NO_SALE'],
+        brooding:["Eleanor, you'd know what to do. You always did."],
+        toast:["Forty years. One more toast in your glass, Eleanor."]},
+  cel: {rehearsing:["If he sells, I'll never sing here again. I could never hurt Father. Her, though..."],
+        arguing:["He's hiding something. He always smiles when he's hiding something."],
+        singing:["Sing for him. Just sing."],
+        resting:["Why does tonight feel like it's happened before?"],
+        drinking:["Mother's glass. He'll drink from Mother's silver glass at midnight, like always.",'SILVER_GLASS'],
+        toast:["Please say you won't sell."]},
+  mar: {reading:["Four hundred pounds. Vale would cover it if I asked. I won't ask.",'MARROW_DEBT'],
+        drinking:["One more and I'll stop. One more."],
+        waiting:["Two drops. Always two drops, never more."],
+        checkup:["That heart won't last another winter. Two drops."],
+        smoking:["Did I lock the cabinet? I always lock the cabinet."],
+        alarmed:["Someone took it. Someone wants Vale dead and me at the end of a rope. I never gave him more than two drops.",'MARROW_INNOCENT'],
+        toast:["Let him live through one more toast."]},
+  fen: {folding:["Thirty years I've starched these sheets. And she wants to make it a casino."],
+        polishing:["Eleanor's glass. I promised her I'd keep it bright. It goes on the pantry shelf till half eleven.",'GLASS_PANTRY'],
+        setting:["Napkins like swans. He likes the swans."],
+        desk:["That boy should be at his post, not raiding the kitchen."],
+        fetching:["Half past eleven. The glass, the tray, the toast."],
+        toast:["God keep him."]},
+  rook:{post:["Lady Ashby tipped me a whole crown. Cold eyes, though."],
+        luggage:["Her cases are heavy as gravestones. What's she got in there?"],
+        carrying:["Mrs. Fenn will skin me if I'm slow."],
+        kitchen:["The lady at the doctor's door... and she saw me see her."],
+        cellar:["Nineteen-oh-two... it's so dark down here."],
+        returning:["Got it! Mind the stairs, Rook."],
+        toast:["Free champagne for the staff after. Maybe."]},
+  ash: {drinking:["He hasn't signed. He never will; I can see it in him. No matter. The signature on my contract is very convincing, and if he dies before he can deny it...",'FORGED'],
+        watching:["Pretty voice. She'll sing in someone else's hotel."],
+        waiting:["The doctor will be smoking in the glasshouse soon. Such a predictable man."],
+        stealing:["Two drops for his heart. The whole bottle for his heart, too."],
+        business:["Say yes, old man. Say yes, and live."],
+        pantry:["The silver rim. His dead wife's glass. How sentimental, and how convenient."],
+        kitchen:["The bellboy saw me at the infirmary. The cellar stairs are steep, and boys are clumsy.",'ASH_ROOK'],
+        cellar:["Quietly now."],
+        suite:["The contract's safe in my writing case. After midnight it's worth a hotel.",'CONTRACT_SUITE'],
+        toast:["Drink up, Augustin."]},
+};
+
+function talkNode(id) {
+  const n = npc(id), a = n.act, t = S.t, f = S.f, opts = [];
+  if (id === 'rook' && n.dead) { addClue('ROOK_DIES'); return node('rook', "*Rook lies at the foot of the cellar stairs. He isn't breathing. The bottle of 1902 Bordeaux has rolled, unbroken, into the dark.*"); }
+  let text = SUN_LINES[id][a] || 'Good evening.';
+
+  if (id === 'aug') {
+    if (a === 'checkup' || a === 'business') return node(id, text);
+    const p = f.presented;
+    if (has('DEATH_TOAST')) opts.push({label:'Warn him about the midnight toast', go:() => {
+      addClue('AUG_PROOF');
+      return ans(id, "Someone means to kill me? At my own toast? I've known these people for decades, friend.\n\nBut you have an honest face, for someone with no name in my register. Bring me proof I can hold: the poison itself, if there is any, and the reason, and someone who'll swear to it. Then I'll act.");
+    }});
+    if (hasItem('contract') && !p.contract) opts.push({label:'Show him the bill of sale', go:() => {
+      p.contract = true;
+      return proof(ans(id, "\"Augustin Vale\"... That isn't my hand. I never signed this! Imogen forged it. If I'd died before refusing her, this would have stood."));
+    }});
+    if (hasItem('glass') && !p.glass) opts.push({label:'Show him the silver-rimmed glass', go:() => {
+      if (!S.glass.confirmed) return ans(id, "Eleanor's glass? Why are you carrying it about? It looks clean enough to me. If you think something's in it, find someone who knows poisons.");
+      p.glass = true;
+      return proof(ans(id, "Felix tested it? Digitalis, in Eleanor's glass. Someone meant me to drink my death at midnight, and Felix to hang for it."));
+    }});
+    if (f.rookTestified && rookAlive() && !p.witness) opts.push({label:'Tell him what Rook saw', go:() => {
+      p.witness = true;
+      return proof(ans(id, "Imogen, coming out of Felix's rooms just before ten? Rook wouldn't lie to me. Not that boy."));
+    }});
+  }
+  if (id === 'mar') {
+    if (a === 'alarmed') { if (t >= 159) addClue('FOXGLOVE_STOLEN'); else text = "Back to the infirmary. Something's nagging at me."; }
+    if (has('FOXGLOVE') && t < 150) opts.push({label:'Ask about the foxglove', go:() => ans(id,
+      f.theft ? "Digitalis. Two drops steady Vale's heart; a whole bottle would stop it. It's locked in my cabinet. Why do you ask?"
+              : "Digitalis. Two drops steady Vale's heart; a whole bottle would stop it. It's locked safely in my cabinet.")});
+    if (hasItem('glass') && !S.glass.confirmed) opts.push({label:'Ask him to test the silver glass', go:() => {
+      if (pRoom() !== 'infirmary') return ans(id, "Here? I need my reagents. Bring it to the infirmary.");
+      if (!S.glass.poisoned) return ans(id, "*He sniffs it, swirls a drop of reagent.* Nothing in it but polish. Clean as a choirboy.");
+      S.glass.confirmed = true; addClue('GLASS_CONFIRMED');
+      return ans(id, "*The reagent turns the colour of a bruise.* Digitalis. A killing dose, in Vale's own glass. That's my foxglove! Whoever did this means to kill him and hang me in one stroke. Show Augustin. Now.");
+    }});
+    if (has('MARROW_DEBT')) opts.push({label:'Ask about his debts', go:() => ans(id, "Four hundred pounds. I'm a fool at cards, not a murderer. Augustin knows. He's offered to help, the stubborn old saint.")});
+  }
+  if (id === 'cel') {
+    if (a !== 'arguing' && a !== 'singing') {
+      opts.push({label:'Ask about the midnight toast', go:() => { addClue('SILVER_GLASS'); return ans(id, "Father drinks every toast from Mother's glass. Silver rim, forty years old. It's terribly romantic and a little morbid."); }});
+      opts.push({label:'Ask about Lady Ashby', go:() => { addClue('ASHBY_BUYER'); return ans(id, "She wants the Meridian for a casino. Roulette in the ballroom, and my stage turned into a cashier's cage. I'd rather it burned."); }});
+    }
+  }
+  if (id === 'fen') {
+    if (has('SILVER_GLASS') || a === 'polishing') opts.push({label:'Ask about the silver glass', go:() => {
+      addClue('GLASS_PANTRY'); addClue('FENN_PLAIN');
+      return ans(id, "I polish it at a quarter to nine and leave it on the pantry shelf. At half past eleven I carry it to the ballroom myself. Nobody else touches it.\n\nAnd if it ever went missing? I'd bring him a plain glass and pray he didn't notice.");
+    }});
+    opts.push({label:'Ask about Lady Ashby', go:() => ans(id, "Came with six trunks and no maid. Walks the halls at all hours. Keeps her suite locked tight, and the only key on a chain round her neck.")});
+  }
+  if (id === 'rook') {
+    if (has('ROOK_SAW') || has('SAW_THEFT') || has('FOXGLOVE_STOLEN') || has('GREEN_SILK')) opts.push({label:'Ask if he saw anyone at the infirmary', go:() => {
+      if (t < 113) return ans(id, "Tonight? Not a soul. Quiet as a church down that end.");
+      f.rookTestified = true; addClue('ROOK_WITNESS');
+      return ans(id, "...Lady Ashby. Slipping out of the doctor's room just before ten, when he was off smoking. She saw me see her. Gave me a look like a cat at a canary.\n\nI'll tell Mr. Vale, if it helps. He's been good to me.");
+    }});
+    if (has('CELLAR_ECHO') || has('ROOK_DIES') || has('ASH_ROOK')) opts.push({label:'Warn him about the cellar', go:() =>
+      ans(id, "The cellar? If a guest asks, I fetch. That's the job. But I'd be glad of the company down there.")});
+  }
+  if (id === 'ash') {
+    if (a === 'drinking') addClue('ASHBY_BUYER');
+    if (has('SAW_POISON') || has('GLASS_CONFIRMED') || has('SAW_PUSH')) opts.push({label:'Accuse her', go:() =>
+      ans(id, "What a vivid imagination. And who would believe a guest with no name in the register over Lady Ashby? Tell whomever you like, darling.")});
+  }
+  return node(id, text, opts);
+}
+function proof(nd) {
+  const p = S.f.presented, missing = [];
+  if (!p.glass) missing.push('the poison');
+  if (!p.contract) missing.push('her motive in writing');
+  if (!p.witness) missing.push('a witness');
+  if (!missing.length) {
+    S.f.convinced = true; addClue('CONVINCED');
+    nd.text += "\n\nThe glass, the forgery, the boy. It was Imogen. *He grips his cane until his knuckles go white.* Very well. At midnight I'll give her my answer, in front of everyone. Stay close.";
+  } else nd.text += `\n\nBut I'll need more than that. I still want ${missing.join(' and ')}.`;
+  return nd;
+}
+
+function thoughtNode(id) {
+  const n = npc(id);
+  if (n.dead) return node(id, "Nothing. The Shadow is very quiet around him.", [], 'shadow');
+  let th = THOUGHTS[id][n.act] || ['...'];
+  if (id === 'rook' && (n.act === 'carrying' || n.act === 'post') && S.t >= 114 && S.t < 200)
+    th = ["Why was Lady Ashby slipping out of the doctor's room? Not my business, Rook. Never your business.", 'ROOK_SAW'];
+  if (id === 'rook' && n.act === 'kitchen' && S.t < 114) th = ["Mrs. Fenn's tarts. Just the one."];
+  if (id === 'mar' && n.act === 'alarmed' && S.t < 159) th = ["Did I lock the cabinet? I always lock the cabinet."];
+  if (th[1]) addClue(th[1]);
+  return node(id, th[0], [], 'shadow');
+}
+
+// ============================================================ objects
+const OBJECTS = [
+  {id:'note', x:4, y:22, name:'Folded note', draw:'note',
+    sun:() => { addClue('NOTE'); return "A folded note on the nightstand:\n\n*STOP THE MIDNIGHT TOAST.*\n\nThe handwriting is familiar. It takes you a moment to realise it's your own."; },
+    shadow:() => { addClue('NOTE'); return "The same note, yellowed and brittle. Under the words, fainter, the same sentence written again and again, as if by someone who kept forgetting they'd written it."; }},
+  {id:'register', x:16, y:16, name:'Guest register',
+    sun:() => "The guest register. Suite: Lady I. Ashby, six trunks. Room 7: the line is blank. No name, no date, though the key was in your pocket.",
+    shadow:() => "Water-stained, the pages fused. Beside Room 7, in faded ink: still here. still here. still here."},
+  {id:'clock', x:12, y:13, name:'Long-case clock',
+    sun:() => `A tall walnut clock with a sun and a moon painted on its face. It reads ${fmtTime(S.t)}.`,
+    shadow:() => "The case is split. The hands drift slowly backward, toward eight o'clock."},
+  {id:'portrait', x:2, y:1, name:'Portrait',
+    sun:() => "Augustin and Eleanor Vale, opening day, 1889. She is holding a silver-rimmed glass.",
+    shadow:() => "The canvas is slashed. Only Eleanor's eyes remain, fixed on the door."},
+  {id:'cabinet', x:2, y:13, name:'Medicine cabinet',
+    sun:() => S.f.theft ? "The lock is scratched bright. On the shelf, a clean ring in the dust where the foxglove bottle stood."
+                        : "A locked glass cabinet. Inside, among the bandages: a small brown bottle labelled DIGITALIS (FOXGLOVE). POISON.",
+    shadow:() => { if (S.f.theft) { addClue('GREEN_SILK'); return "The cabinet glass is shattered. Threads of green silk hang from the lock, bright as new."; }
+                   return "Behind cracked glass, the brown bottle sits waiting. Something about it feels like a held breath."; }},
+  {id:'ious', x:27, y:14, name:'Card table',
+    sun:() => { addClue('MARROW_DEBT'); return "A card table with an abandoned hand of bridge. Tucked under the ashtray: IOU, £400, F. Marrow."; },
+    shadow:() => "The cards have rotted into a single grey lump. The IOU is still crisp. Debts keep."},
+  {id:'glass', x:41, y:13, name:'Silver-rimmed glass', draw:'glass', visible:() => S.glass.where === 'pantry',
+    sun:() => node('obj', "Mr. Vale's silver-rimmed glass, polished bright, waiting on the shelf for the midnight toast.", [
+      {label:'Take the glass', go:() => { S.glass.where = 'player'; S.inv.push('glass'); renderInv(); return null; }}], 'sun'),
+    shadow:() => { if (S.glass.poisoned) { addClue('GLASS_BLACK'); return "The silver glass is black inside, as if it holds a little piece of night. It has been poisoned."; }
+                   return "Tarnished in the Shadow, but clean. For now."; }},
+  {id:'shelf', x:40, y:13, name:'Pantry shelf', visible:() => hasItem('glass'),
+    sun:() => node('obj', "The pantry shelf, where the silver glass belongs.", [
+      {label:'Put the glass back', go:() => { S.glass.where = 'pantry'; S.inv = S.inv.filter(i => i !== 'glass'); renderInv(); return null; }}], 'sun'),
+    shadow:() => "A shelf of broken crockery."},
+  {id:'contract', x:41, y:2, name:'Writing case', draw:'case', visible:() => S.contract.where === 'suite',
+    sun:() => {
+      if (playerIn('suite') && npc('ash').act === 'suite' && roomAt(npc('ash').x, npc('ash').y) === 'suite')
+        return "Lady Ashby is right there, watching you. You can't touch the case with her in the room.";
+      return node('obj', "A green leather writing case. Inside: a bill of sale for the Hotel Meridian, to Lady I. Ashby, signed \"Augustin Vale\" and dated today.", [
+        {label:'Take the bill of sale', go:() => { S.contract.where = 'player'; S.inv.push('contract'); renderInv(); addClue('FORGED'); return null; }}], 'sun');
+    },
+    shadow:() => { addClue('FORGED'); addClue('CONTRACT_SUITE'); return "A bill of sale for the hotel, signed \"Augustin Vale\". In the Shadow the signature squirms on the page like something alive. It isn't his hand."; }},
+  {id:'wine', x:39, y:25, name:'Wine rack',
+    sun:() => "Racks of dusty bottles. The 1902 Bordeaux sits on the middle shelf.",
+    shadow:() => "Every bottle has burst. The floor is sticky with old wine."},
+  {id:'stain_toast', x:17, y:4, name:'Dark stain', shadowOnly:true, draw:'stain',
+    shadow:() => { addClue('DEATH_TOAST'); return "A dark stain on the parquet, in the shape of a man who fell at midnight. Silver glints in it."; }},
+  {id:'stain_cellar', x:33, y:22, name:'Small shape', shadowOnly:true, draw:'stain', visible:() => rookAlive() && S.t < 188,
+    shadow:() => { addClue('CELLAR_ECHO'); return "At the foot of the stairs, a small dark shape on the stone, the size of a boy. The floor remembers 11:08 before it happens."; }},
+];
+const objVisible = o => (!o.shadowOnly || S.world === 'shadow') && (!o.visible || o.visible());
+
+// ============================================================ midnight
+function midnight() {
+  S.ended = true;
+  const deadAug = S.glass.poisoned && S.glass.where !== 'player';
+  const f = S.f; let title, text, outcome;
+  addClue('DEATH_TOAST');
+  if (deadAug) {
+    outcome = 'death'; title = 'The toast';
+    text = "Augustin raises Eleanor's silver-rimmed glass. \"To the Meridian.\" He drinks.\n\nA small, puzzled frown. Then he folds onto the parquet, and Celeste screams.\n\nPlaster sifts from the ceiling. The gilding peels, the chandelier shrieks on its chain, and the Sun goes out of every window at once.";
+    if (!rookAlive()) { addClue('ROOK_DIES'); text += "\n\nDown in the cellar, Rook has been lying at the foot of the stairs since 11:08. Nobody found him in time."; }
+  } else if (f.convinced && rookAlive()) {
+    outcome = 'won'; title = 'Twelve, and one';
+    text = "Augustin lifts a plain glass. \"No, Imogen.\" He holds up the bill of sale, and Eleanor's glass beside it. Rook steps forward, shaking, and says what he saw. Dr. Marrow says what he tested.\n\nLady Ashby runs, and finds Rook's friends from the kitchen waiting at the door.\n\nThe clock in the lobby strikes twelve. Then, for the first time, it strikes one.\n\nYou look for the Shadow and cannot find it. In the register, beside Room 7, there's a name now. It's yours, in your own handwriting. You don't remember writing it, but you've stopped being surprised by that.";
+  } else if (f.convinced) {
+    outcome = 'rook'; title = 'One short';
+    text = "Augustin denounces Lady Ashby before the whole ballroom. But the boy who saw her is lying at the foot of the cellar stairs, and without him it's her word against a dead man's.\n\nThe hotel will not close its night over a small grave. The clock runs backward.";
+  } else {
+    outcome = 'partial'; title = 'Not like this';
+    if (f.poisonFoiled || f.noGlass) text = "Augustin drinks the toast and lives. Whatever was meant to happen to his glass never happened.\n\nLady Ashby only smiles. Her contract bears his signature, after all, and there will be other nights. The hotel knows it. The clock runs backward.";
+    else text = "Augustin drinks from a plain glass and lives. He refuses the sale, and Lady Ashby only smiles: her contract bears his signature, lawyers are patient, and the poisoned glass in your pocket proves nothing to anyone who matters.\n\nThe hotel will not keep this night. The clock runs backward.";
+    if (!rookAlive()) { addClue('ROOK_DIES'); text += "\n\nAnd in the cellar, Rook has lain at the foot of the stairs since 11:08."; }
+  }
+  if (outcome === 'won') { P.won = true; save(); }
+  bell();
+  document.getElementById('mTitle').textContent = title;
+  document.getElementById('mEyebrow').textContent = outcome === 'won' ? `Midnight · solved on night ${P.loop}` : `Midnight · night ${P.loop} ends`;
+  document.getElementById('mText').innerHTML = fmtText(text);
+  const b = document.getElementById('mButtons'); b.innerHTML = '';
+  if (outcome === 'won') {
+    b.append(btn('Start a new stay', 'primary', () => { P = freshSave(); save(); hide('midnight'); startNight(); }));
+    b.append(btn('Keep wandering', '', () => { hide('midnight'); S.ended = true; S.t = END; S.wander = true; }));
+  } else {
+    b.append(btn('Wake in Room 7', 'primary', () => { P.loop++; save(); hide('midnight'); startNight(); }));
+  }
+  show('midnight');
+}
+
+// ============================================================ update
+const keys = {};
+let hurryToggle = false, last = performance.now();
+const modalOpen = () => !document.getElementById('dialog').hidden || !document.getElementById('journal').hidden ||
+                        !document.getElementById('titleScreen').hidden || !document.getElementById('midnight').hidden;
+
+function update(dt) {
+  movePlayer(dt);
+  if (S.ended) return;
+  const rate = (keys.t || hurryToggle) ? HURRY : 1;
+  const dg = dt / SEC_PER_MIN * rate;
+  S.t = Math.min(END, S.t + dg);
+  for (const n of Object.values(S.npcs)) updateNpc(n, dg);
+  runScenes();
+  runEvents();
+}
+
+function updateNpc(n, dg) {
+  if (n.dead) { n.moving = false; return; }
+  let seg = SCHED[n.id][0];
+  for (const s of SCHED[n.id]) if (s[0] <= S.t) seg = s;
+  if (seg !== n.seg) {
+    n.seg = seg; n.act = seg[2];
+    const [gx, gy] = SPOTS[seg[1]];
+    n.path = bfs(Math.floor(n.x), Math.floor(n.y), gx, gy, (x, y) => passable(x, y, 'sun', true)) || [];
+  }
+  let budget = NPC_SPEED * dg;
+  while (budget > 0 && n.path.length) {
+    const [px, py] = n.path[0], tx = px + .5, ty = py + .5, dx = tx - n.x, dy = ty - n.y, d = Math.hypot(dx, dy);
+    if (Math.abs(dx) > .01) n.face = Math.sign(dx);
+    if (d <= budget) { n.x = tx; n.y = ty; n.path.shift(); budget -= d; }
+    else { n.x += dx / d * budget; n.y += dy / d * budget; budget = 0; }
+  }
+  n.moving = n.path.length > 0;
+  n.phase += dg * 3;
+}
+
+function canStand(x, y, world) {
+  const r = .27;
+  return passable(Math.floor(x-r), Math.floor(y-r), world) && passable(Math.floor(x+r), Math.floor(y-r), world) &&
+         passable(Math.floor(x-r), Math.floor(y+r), world) && passable(Math.floor(x+r), Math.floor(y+r), world);
+}
+
+function movePlayer(dt) {
+  const p = S.player;
+  let vx = (keys.right ? 1 : 0) - (keys.left ? 1 : 0), vy = (keys.down ? 1 : 0) - (keys.up ? 1 : 0);
+  if (modalOpen()) vx = vy = 0;
+  p.moving = false;
+  if (vx || vy) {
+    p.path = null; p.pending = null;
+    const l = Math.hypot(vx, vy), step = PLAYER_SPEED * dt;
+    const nx = p.x + vx / l * step, ny = p.y + vy / l * step;
+    if (canStand(nx, p.y, S.world)) p.x = nx;
+    if (canStand(p.x, ny, S.world)) p.y = ny;
+    if (vx) p.face = Math.sign(vx);
+    p.moving = true;
+  } else if (p.path && !modalOpen()) {
+    let budget = PLAYER_SPEED * dt;
+    while (budget > 0 && p.path.length) {
+      const [tx, ty] = p.path[0], cx = tx + .5, cy = ty + .5, dx = cx - p.x, dy = cy - p.y, d = Math.hypot(dx, dy);
+      if (Math.abs(dx) > .01) p.face = Math.sign(dx);
+      if (d <= budget) { p.x = cx; p.y = cy; p.path.shift(); budget -= d; }
+      else { p.x += dx / d * budget; p.y += dy / d * budget; budget = 0; }
+      p.moving = true;
+    }
+    if (!p.path.length) {
+      p.path = null;
+      if (p.pending) { const tgt = p.pending; p.pending = null; if (tgtDist(tgt) <= REACH + .3) interactWith(tgt); }
+    }
+  }
+  if (p.moving) p.phase += dt * 9;
+}
+
+// ============================================================ interaction
+function targets() {
+  const list = [];
+  for (const n of Object.values(S.npcs)) list.push({kind:'npc', id:n.id, x:n.x, y:n.y, name:LOOKS[n.id].name});
+  for (const o of OBJECTS) if (objVisible(o)) list.push({kind:'obj', id:o.id, x:o.x+.5, y:o.y+.5, name:o.name, o});
+  return list;
+}
+const tgtDist = tgt => {
+  const cur = tgt.kind === 'npc' ? npc(tgt.id) : {x: tgt.x, y: tgt.y};
+  return dist(S.player, cur);
+};
+function nearest() {
+  let best = null, bd = REACH;
+  for (const tg of targets()) { const d = dist(S.player, tg); if (d < bd) { bd = d; best = tg; } }
+  return best;
+}
+function interactWith(tg) {
+  if (!tg || S.ended) return;
+  const sun = S.world === 'sun';
+  if (tg.kind === 'npc') { openDialog(sun ? talkNode(tg.id) : thoughtNode(tg.id)); return; }
+  const fn = sun ? tg.o.sun : tg.o.shadow;
+  if (!fn) return;
+  const r = fn();
+  if (r == null) return;
+  openDialog(typeof r === 'string' ? node('obj', r, [], S.world) : r, tg.o.name);
+}
+
+function switchWorld() {
+  if (modalOpen() || S.ended) return;
+  const to = S.world === 'sun' ? 'shadow' : 'sun';
+  if (!canStand(S.player.x, S.player.y, to)) {
+    toast(to === 'shadow' ? 'Rubble fills this spot in the Shadow. Step aside first.' : 'In the Sun, a wall stands right here. Step aside first.');
+    return;
+  }
+  S.trans = {from: S.world, start: performance.now()};
+  S.world = to;
+  S.player.path = null;
+  document.body.classList.toggle('shadow', to === 'shadow');
+  const b = document.getElementById('worldBtn');
+  b.className = to; b.textContent = to === 'sun' ? '☀ Sun' : '☾ Shadow';
+  whoosh(to);
+}
+
+// ============================================================ dialog UI
+let dlgCurrent = null;
+function openDialog(nd, objName) {
+  const d = document.getElementById('dialog');
+  dlgCurrent = nd;
+  const shadow = nd.mode === 'shadow';
+  d.classList.toggle('shadowmode', shadow);
+  const who = nd.who in LOOKS ? LOOKS[nd.who].name + (shadow ? ', thinking' : '') : (objName || dlgCurrent.objName || '');
+  if (objName) nd.objName = objName;
+  document.getElementById('dlgWho').textContent = who;
+  document.getElementById('dlgText').innerHTML = fmtText(nd.text);
+  const pc = document.getElementById('dlgPortrait'), g = pc.getContext('2d');
+  g.clearRect(0, 0, 112, 112);
+  if (nd.who in LOOKS) { g.save(); g.scale(4, 4); drawPerson(g, 14, 18, LOOKS[nd.who], shadow, {}); g.restore(); }
+  else { g.save(); g.translate(56, 56); g.strokeStyle = shadow ? '#b4a8ea' : '#d6b25e'; g.lineWidth = 3; g.beginPath(); g.arc(0, 0, 22, 0, Math.PI*2); g.stroke(); g.beginPath(); g.arc(0, 0, 8, 0, Math.PI*2); g.fillStyle = g.strokeStyle; g.fill(); g.restore(); }
+  pc.hidden = false;
+  const box = document.getElementById('dlgOpts'); box.innerHTML = '';
+  const opts = [...nd.options, BYE];
+  opts.forEach((o, i) => {
+    const b = document.createElement('button');
+    b.innerHTML = `<span class="n">${i+1}</span>${esc(o.label)}`;
+    b.onclick = () => chooseOpt(o);
+    box.append(b);
+  });
+  d.hidden = false;
+  box.firstChild?.focus({preventScroll:true});
+}
+function chooseOpt(o) {
+  const next = o.go();
+  if (next) { next.objName = dlgCurrent?.objName; openDialog(next); } else closeDialog();
+}
+function closeDialog() { document.getElementById('dialog').hidden = true; dlgCurrent = null; document.getElementById('cv').focus?.(); }
+function fmtText(s) {
+  return s.split('\n\n').map(par => '<p>' + esc(par).replace(/\*([^*]+)\*/g, '<em>$1</em>') + '</p>').join('');
+}
+
+// ============================================================ other UI
+const show = id => { document.getElementById(id).hidden = false; };
+const hide = id => { document.getElementById(id).hidden = true; };
+function btn(label, cls, fn) { const b = document.createElement('button'); b.textContent = label; if (cls) b.className = cls; b.onclick = fn; return b; }
+function toast(html) {
+  const box = document.getElementById('toasts'), el = document.createElement('div');
+  el.className = 'toast'; el.innerHTML = html; box.append(el);
+  while (box.children.length > 3) box.firstChild.remove();
+  setTimeout(() => el.remove(), 4800);
+}
+function renderLog() {
+  const ol = document.getElementById('log');
+  if (!S.log.length) { ol.innerHTML = '<li class="empty">Nothing yet. Stand in a room while people talk, or listen from the Shadow.</li>'; return; }
+  ol.innerHTML = S.log.map(l => `<li class="${l.action ? 'act' : l.whisper ? 'w' : ''}"><span class="t">${fmtTime(l.t)}</span>` +
+    (l.action ? esc(l.text) : `<span class="who">${esc(LOOKS[l.who].name.split(' ').slice(-1)[0])}:</span> ${esc(l.text)}`) + '</li>').join('');
+  ol.scrollTop = ol.scrollHeight;
+}
+function renderInv() {
+  const box = document.getElementById('inv');
+  box.innerHTML = S.inv.map(i => i === 'glass'
+    ? `<span class="chip ${S.glass.confirmed ? 'ok' : ''}">Silver glass${S.glass.confirmed ? ' (tested: poisoned)' : ''}</span>`
+    : '<span class="chip">Bill of sale</span>').join('');
+}
+let lastHud = '';
+function renderHud() {
+  const where = pRoom() ? ROOMS[pRoom()].n : 'Doorway';
+  const s = fmtTime(S.t) + where + P.loop + (keys.t || hurryToggle) + overview;
+  if (s === lastHud) return; lastHud = s;
+  document.getElementById('clock').textContent = S.wander ? '12:01 AM' : fmtTime(S.t);
+  document.getElementById('where').textContent = where;
+  document.getElementById('night').textContent = `Night ${P.loop}`;
+  document.getElementById('ffBtn').classList.toggle('on', !!(keys.t || hurryToggle));
+  document.getElementById('mapBtn').classList.toggle('on', overview);
+}
+function renderPrompt() {
+  const el = document.getElementById('promptEl');
+  if (modalOpen() || S.ended) { el.hidden = true; return; }
+  const tg = nearest();
+  if (!tg) { el.hidden = true; return; }
+  const sun = S.world === 'sun';
+  const verb = tg.kind === 'npc' ? (sun ? (npc(tg.id).dead ? 'Kneel by' : 'Talk to') : 'Read the thoughts of') : 'Examine';
+  el.innerHTML = `<kbd>E</kbd> ${verb} ${esc(tg.name)}`;
+  el.hidden = false;
+}
+
+// Journal
+let jTab = 'leads';
+function leads() {
+  const L = [], add = (c, s) => { if (c && L.length < 4) L.push(s); };
+  if (P.won) L.push('You solved the night. Start a new stay from the journal if you want to play again.');
+  add(!has('NOTE'), 'Read the note on the nightstand in Room 7.');
+  add(!has('DEATH_TOAST'), 'Something happens at the midnight toast in the Ballroom. Live through the night, or look for its echo on the ballroom floor in the Shadow.');
+  add(!has('SILVER_GLASS'), "What does Augustin drink his toasts from? His daughter Celeste would know.");
+  add(has('SILVER_GLASS') && !has('GLASS_PANTRY'), 'Where is the silver glass kept before midnight? Mrs. Fenn, the housekeeper, looks after it.');
+  add(!has('FOXGLOVE'), 'Dr. Marrow examines Augustin in the Infirmary around 9:30. It is private, so listen from the Shadow.');
+  add(has('GLASS_PANTRY') && !has('SAW_POISON') && !has('GLASS_BLACK'), 'Watch the silver glass on the pantry shelf between 10:45 and 11:00, without being seen.');
+  add(has('FOXGLOVE') && !has('FOXGLOVE_STOLEN') && !has('SAW_THEFT'), "Check Dr. Marrow's medicine cabinet after he leaves to smoke, around 9:45.");
+  add(!has('ROOK_SAW') && !has('ROOK_WITNESS') && (has('FOXGLOVE_STOLEN') || has('SAW_THEFT') || has('GREEN_SILK')), 'Rook the bellhop was in the hall by the Infirmary just before ten. Read his thoughts in the Shadow.');
+  add(has('ROOK_DIES') && !has('SAW_PUSH') && !has('ROOK_SAVED'), 'Rook dies in the cellar at 11:08. Watch what happens there, unseen.');
+  add((has('SAW_PUSH') || has('ASH_ROOK')) && !has('ROOK_SAVED'), "Ashby won't act while someone in the Sun can see her. Be in the cellar, in the Sun, before 11:05.");
+  add(has('ASHBY_BUYER') && !has('FORGED'), 'What is Lady Ashby really holding? Read her thoughts in the Shadow early in the evening.');
+  add(has('FORGED') && !has('CONTRACT_SUITE'), "Where does Ashby keep that contract? Read her thoughts in her suite, after 11:15.");
+  add(has('CONTRACT_SUITE') && !has('SUITE_HOLE'), "Ashby's suite is locked. In the Shadow, the walls aren't all where they should be. Try the Conservatory.");
+  add(has('SUITE_HOLE') && !has('CONTRACT_SUITE') && !has('FORGED'), "You can slip into Ashby's suite from the Shadow, then step into the Sun to pick things up.");
+  add((has('GLASS_BLACK') || has('SAW_POISON')) && !has('GLASS_CONFIRMED'), 'Take the poisoned glass after 10:56, then have Dr. Marrow test it in the Infirmary.');
+  add(has('DEATH_TOAST') && !has('AUG_PROOF'), 'Warn Augustin. He is alone in his Study before 9:20 and after 10:50.');
+  add(has('AUG_PROOF') && !P.won, 'In a single night, bring Augustin the tested glass, the forged contract, and Rook\'s word. And keep Rook alive until midnight.');
+  if (!L.length) L.push('Wander. Listen. Switch to the Shadow often.');
+  return L;
+}
+function renderJournal() {
+  const n = Object.keys(P.clues).length;
+  document.getElementById('jSub').textContent = `Night ${P.loop} · ${fmtTime(S.t)} · ${n} of ${Object.keys(CLUES).length} clues`;
+  document.querySelectorAll('.tabs button').forEach(b => b.setAttribute('aria-selected', b.dataset.tab === jTab));
+  const body = document.getElementById('jBody');
+  if (jTab === 'leads') body.innerHTML = '<ol class="leads">' + leads().map(l => `<li>${esc(l)}</li>`).join('') + '</ol>';
+  if (jTab === 'clues') {
+    let h = '';
+    for (const [g, gname] of Object.entries(GROUPS)) {
+      const items = Object.entries(CLUES).filter(([id, c]) => c[0] === g && P.clues[id]);
+      if (!items.length) continue;
+      h += `<div class="cl-group"><h3>${gname}</h3><ul>` + items.map(([id, c]) => `<li>${esc(c[1])} <span class="lp">night ${P.clues[id].loop}</span></li>`).join('') + '</ul></div>';
+    }
+    body.innerHTML = h || '<p>No clues yet.</p>';
+  }
+  if (jTab === 'cast') body.innerHTML = '<div class="cast">' + Object.values(LOOKS).map(l => `<div><b>${esc(l.name)}</b>${esc(l.role)}</div>`).join('') + '</div>';
+  if (jTab === 'help') body.innerHTML = `
+    <p><b>The Sun</b> is the hotel as it wants to be seen. People notice you, talk to you, and change what they do while you watch. You can take and use things.</p>
+    <p><b>The Shadow</b> is the same hotel, at the same moment, rotted through. Nobody can see you. Private conversations carry on around you, you can read people's thoughts, and objects show what they really are. You can't speak or pick anything up, but you can carry what you already hold.</p>
+    <p>Some walls have crumbled in the Shadow, and some halls are blocked with rubble. You can only switch where both versions of the hotel have floor.</p>
+    <p>At midnight the night resets. Your journal remembers. Your pockets don't.</p>`;
+}
+function openJournal() { if (!document.getElementById('titleScreen').hidden || !document.getElementById('midnight').hidden) return; closeDialog(); renderJournal(); show('journal'); document.getElementById('newDot').hidden = true; }
+
+// ============================================================ audio (starts on first interaction)
+let actx = null;
+function tone(freq, dur, type = 'sine', vol = .05, slide) {
+  try {
+    if (!actx) actx = new (window.AudioContext || window.webkitAudioContext)();
+    const o = actx.createOscillator(), g = actx.createGain(), n = actx.currentTime;
+    o.type = type; o.frequency.setValueAtTime(freq, n);
+    if (slide) o.frequency.exponentialRampToValueAtTime(slide, n + dur);
+    g.gain.setValueAtTime(vol, n); g.gain.exponentialRampToValueAtTime(.0001, n + dur);
+    o.connect(g); g.connect(actx.destination); o.start(n); o.stop(n + dur);
+  } catch (e) {}
+}
+const chime = () => { tone(988, .35, 'triangle', .04); setTimeout(() => tone(1319, .5, 'triangle', .035), 110); };
+const whoosh = to => to === 'shadow' ? tone(330, .6, 'sine', .06, 70) : tone(180, .5, 'sine', .05, 620);
+const bell = () => [0, 900, 1800].forEach(d => setTimeout(() => { tone(196, 2.2, 'sine', .08); tone(392, 1.6, 'triangle', .02); }, d));
+
+// ============================================================ rendering
+const cv = document.getElementById('cv'), ctx = cv.getContext('2d');
+let layers = {}, view = {scale: 1, cx: 0, cy: 0, vw: 0, vh: 0, dpr: 1}, overview = false;
+
+function hash(x, y, k = 0) { let h = (x * 374761393 + y * 668265263 + k * 2147483647) | 0; h = (h ^ (h >>> 13)) * 1274126177; h ^= h >>> 16; return (h >>> 0) / 4294967296; }
+function rgb(hex) { const n = parseInt(hex.slice(1), 16); return [(n >> 16) & 255, (n >> 8) & 255, n & 255]; }
+function shade(hex, k = 1) {
+  const [r, g, b] = rgb(hex), gr = .3*r + .59*g + .11*b;
+  const m = (c, add) => Math.max(0, Math.min(255, Math.round((c*.32 + gr*.68) * .5 + add)));
+  return `rgb(${m(r, 4)},${m(g, 4)},${m(b, 14)})`;
+}
+const pal = (world, c) => world === 'sun' ? c : shade(c);
+function rr(g, x, y, w, h, r) { g.beginPath(); g.moveTo(x+r, y); g.arcTo(x+w, y, x+w, y+h, r); g.arcTo(x+w, y+h, x, y+h, r); g.arcTo(x, y+h, x, y, r); g.arcTo(x, y, x+w, y, r); g.closePath(); }
+function ell(g, x, y, rx, ry) { g.beginPath(); g.ellipse(x, y, rx, ry, 0, 0, Math.PI*2); }
+
+function floorTile(g, x, y, room, world) {
+  const F = FLOORS[ROOMS[room].f], c = F.c.map(cc => pal(world, cc)), X = x*T, Y = y*T;
+  switch (F.t) {
+    case 'planks':
+      g.fillStyle = c[0]; g.fillRect(X, Y, T, T);
+      g.fillStyle = c[1];
+      for (let i = 0; i < 4; i++) { g.fillRect(X, Y + i*6 + 5, T, 1); if (hash(x, y, i) < .4) g.fillRect(X + Math.floor(hash(x, y, i+9)*T), Y + i*6, 1, 6); }
+      break;
+    case 'parquet':
+      for (let i = 0; i < 2; i++) for (let j = 0; j < 2; j++) {
+        g.fillStyle = (i + j) % 2 ? c[0] : c[1]; g.fillRect(X + i*12, Y + j*12, 12, 12);
+        g.fillStyle = 'rgba(0,0,0,.12)';
+        for (let k = 1; k < 3; k++) (i + j) % 2 ? g.fillRect(X + i*12 + k*4, Y + j*12, 1, 12) : g.fillRect(X + i*12, Y + j*12 + k*4, 12, 1);
+      }
+      break;
+    case 'check':
+      for (let i = 0; i < 2; i++) for (let j = 0; j < 2; j++) { g.fillStyle = (x*2 + i + y*2 + j) % 2 ? c[0] : c[1]; g.fillRect(X + i*12, Y + j*12, 12, 12); }
+      break;
+    case 'carpet':
+      g.fillStyle = c[0]; g.fillRect(X, Y, T, T);
+      g.fillStyle = c[1]; g.beginPath(); g.moveTo(X + 12, Y + 3); g.lineTo(X + 21, Y + 12); g.lineTo(X + 12, Y + 21); g.lineTo(X + 3, Y + 12); g.closePath(); g.fill();
+      break;
+    case 'marble':
+      g.fillStyle = (x + y) % 2 ? c[0] : c[1]; g.fillRect(X, Y, T, T);
+      g.strokeStyle = (x + y) % 2 ? 'rgba(90,90,90,.18)' : 'rgba(255,255,255,.1)'; g.lineWidth = 1;
+      g.beginPath(); g.moveTo(X + hash(x, y)*T, Y); g.quadraticCurveTo(X + 12, Y + 12, X + T, Y + hash(x, y, 2)*T); g.stroke();
+      break;
+    case 'runner': {
+      g.fillStyle = c[0]; g.fillRect(X, Y, T, T);
+      g.fillStyle = c[1];
+      if (y === 10) g.fillRect(X, Y + 4, T, 2); else g.fillRect(X, Y + T - 6, T, 2);
+      g.fillStyle = 'rgba(0,0,0,.15)'; if (x % 3 === 0) g.fillRect(X + 10, Y + (y === 10 ? 12 : 6), 4, 4);
+      break; }
+    case 'stone':
+      g.fillStyle = c[0]; g.fillRect(X, Y, T, T); g.fillStyle = c[1];
+      g.fillRect(X, Y + 11, T, 2); g.fillRect(X + (y % 2 ? 4 : 16), Y, 2, 11); g.fillRect(X + (y % 2 ? 14 : 8), Y + 13, 2, 11);
+      break;
+  }
+  if (world === 'shadow') decay(g, x, y, room);
+}
+
+function decay(g, x, y, room) {
+  const X = x*T, Y = y*T, h1 = hash(x, y, 31), h2 = hash(x, y, 47), h3 = hash(x, y, 59);
+  if (h1 < .1) { g.fillStyle = 'rgba(5,5,10,.55)'; g.fillRect(X + 2, Y + 2, T - 6, T - 8); }                     // missing tile
+  if (h2 < .3) { g.strokeStyle = 'rgba(8,8,12,.7)'; g.lineWidth = 1; g.beginPath(); g.moveTo(X + h2*60 % T, Y);
+                 g.lineTo(X + 8 + h3*8, Y + 10); g.lineTo(X + h1*T, Y + T); g.stroke(); }                         // crack
+  if (h3 < .12) { g.fillStyle = 'rgba(30,20,22,.45)'; ell(g, X + 12, Y + 12, 9 + h1*6, 6 + h2*4); g.fill(); }    // stain
+  if (h3 > .93) { g.fillStyle = 'rgba(110,130,160,.18)'; ell(g, X + 12, Y + 14, 10, 5); g.fill(); }              // puddle
+  if (room === 'conservatory' && h1 > .6) { g.strokeStyle = 'rgba(80,100,70,.6)'; g.beginPath(); g.moveTo(X + 6, Y + 20); g.lineTo(X + 9, Y + 10); g.moveTo(X + 10, Y + 20); g.lineTo(X + 15, Y + 13); g.stroke(); }
+}
+
+function wallTile(g, x, y, world) {
+  const X = x*T, Y = y*T;
+  let near = false;
+  for (const [dx, dy] of DIRS) { const nx = x + dx, ny = y + dy; if (nx >= 0 && ny >= 0 && nx < W && ny < H && grid[ny][nx] !== '#') near = true; }
+  if (!near) return;
+  if (world === 'sun') {
+    g.fillStyle = '#123e3b'; g.fillRect(X, Y, T, T);
+    g.fillStyle = '#0d2e2c'; g.fillRect(X, Y + T - 5, T, 5);
+    g.fillStyle = '#1a4d49'; for (let i = 3; i < T; i += 8) g.fillRect(X + i, Y + 2, 2, T - 9);
+    g.fillStyle = '#d6b25e';
+    if (y + 1 < H && grid[y+1][x] !== '#') g.fillRect(X, Y + T - 2, T, 2);
+    if (y - 1 >= 0 && grid[y-1][x] !== '#') g.fillRect(X, Y, T, 1);
+  } else {
+    g.fillStyle = '#29262f'; g.fillRect(X, Y, T, T);
+    g.fillStyle = '#1d1b22'; g.fillRect(X, Y + T - 5, T, 5);
+    if (hash(x, y, 5) < .35) { g.fillStyle = '#4a2f2b'; for (let r = 0; r < 3; r++) for (let c = 0; c < 2; c++) g.fillRect(X + 2 + c*11 + (r % 2)*5, Y + 3 + r*6, 9, 4); }
+    g.strokeStyle = '#0e0d12'; g.lineWidth = 1;
+    if (hash(x, y, 6) < .5) { g.beginPath(); g.moveTo(X + 4, Y); g.lineTo(X + 10, Y + 9); g.lineTo(X + 7, Y + 16); g.stroke(); }
+  }
+}
+
+function doorTile(g, x, y, ch, world) {
+  const X = x*T, Y = y*T, vertical = grid[y][x-1] === '#' && grid[y][x+1] === '#';
+  if (ch === '+' || ch === 'L') {
+    g.fillStyle = pal(world, '#4a3324'); g.fillRect(X, Y, T, T);
+    g.fillStyle = pal(world, '#3a281b'); for (let i = 0; i < T; i += 6) vertical ? g.fillRect(X, Y + i, T, 1) : g.fillRect(X + i, Y, 1, T);
+    if (ch === 'L') {
+      g.fillStyle = pal(world, '#6b2a1e'); vertical ? g.fillRect(X + 2, Y, T - 4, T) : g.fillRect(X, Y + 3, T, T - 6);
+      g.fillStyle = pal(world, '#d6b25e'); ell(g, X + 12, Y + 12, 3, 3); g.fill();
+      g.fillStyle = '#111'; g.fillRect(X + 11.5, Y + 12, 1, 3);
+    }
+    if (world === 'shadow' && ch === '+' && hash(x, y, 3) < .5) { g.strokeStyle = 'rgba(0,0,0,.6)'; g.beginPath(); g.moveTo(X, Y + 5); g.lineTo(X + T, Y + 17); g.stroke(); }
+  } else if (ch === 'h') {
+    if (world === 'sun') {
+      wallTile(g, x, y, 'sun');
+      g.strokeStyle = 'rgba(0,0,0,.55)'; g.lineWidth = 1; g.beginPath(); g.moveTo(X + 13, Y); g.lineTo(X + 9, Y + 7); g.lineTo(X + 14, Y + 13); g.lineTo(X + 10, Y + T); g.stroke();
+    } else {
+      g.fillStyle = '#2a2722'; g.fillRect(X, Y, T, T);
+      for (let i = 0; i < 6; i++) { g.fillStyle = i % 2 ? '#4a3f37' : '#3a332e'; ell(g, X + hash(x, y, i)*T, Y + hash(x, y, i+20)*T, 2 + hash(x, y, i+40)*2.5, 2); g.fill(); }
+      g.fillStyle = 'rgba(180,168,234,.10)'; g.fillRect(X, Y, T, T);
+    }
+  }
+}
+
+function rubbleTile(g, x, y) {
+  const X = x*T, Y = y*T;
+  g.fillStyle = '#2f2b29'; g.fillRect(X, Y, T, T);
+  for (let i = 0; i < 9; i++) {
+    const rx = X + hash(x, y, i)*T, ry = Y + hash(x, y, i+30)*T, s = 3 + hash(x, y, i+60)*5;
+    g.fillStyle = ['#4b4540','#5a524b','#3b3632','#665c52'][i % 4];
+    g.beginPath(); g.moveTo(rx, ry - s); g.lineTo(rx + s, ry); g.lineTo(rx + s*.3, ry + s*.8); g.lineTo(rx - s, ry + s*.2); g.closePath(); g.fill();
+  }
+  g.strokeStyle = '#6b5a3a'; g.lineWidth = 1.5; g.beginPath(); g.moveTo(X + 2, Y + hash(x, y, 7)*T); g.lineTo(X + T - 2, Y + hash(x, y, 8)*T); g.stroke();
+}
+
+// Furniture: [kind, x, y, w, h]
+const FURN = [
+  ['rug',2,4,6,3],['desk',3,2,3,1],['shelf',6,1,3,1],['armchair',7,6,1,1],['shelf',1,6,1,2],
+  ['stage',16,1,6,2],['piano',23,1,2,2],['table',12,7,1,1],['table',25,7,1,1],['table',25,2,1,1],['table',13,2,1,1],['chandelier',18,4,2,2],
+  ['plant',28,1,1,1],['plant',34,1,1,1],['plant',28,8,1,1],['plant',34,8,1,1],['bench',30,3,3,1],['fountain',29,6,2,2],
+  ['bed',39,5,3,2],['wdesk',40,2,2,1],['trunk',37,7,1,1],['trunk',37,6,1,1],['trunk',38,7,1,1],
+  ['cabinet',1,13,2,1],['desk',2,16,2,1],['cot',6,17,3,1],['cot',6,19,3,1],
+  ['clock',12,13,1,1],['reception',13,16,5,1],['sofa',12,20,3,1],['plant',19,13,1,1],['plant',11,22,1,1],['rug',14,19,3,3],
+  ['barcounter',21,13,7,1],['table',26,17,1,1],['cardtable',27,14,1,1],['table',21,18,1,1],
+  ['stove',30,13,3,1],['counter',34,13,3,1],['ktable',33,16,2,1],
+  ['pshelf',38,13,5,1],['crates',41,18,2,2],
+  ['rack',36,25,6,1],['rack',42,21,1,3],['barrel',30,25,1,1],['barrel',31,25,1,1],['barrel',30,24,1,1],['stairs',33,21,1,1],
+  ['bed',1,22,2,3],['nightstand',4,22,1,1],['wardrobe',8,21,2,1],['rug',4,24,3,2],
+  ['lshelf',21,21,8,1],['ktable',23,24,3,1],['basket',27,25,1,1],
+];
+
+function furniture(g, k, x, y, w, h, world) {
+  const X = x*T, Y = y*T, Wd = w*T, Ht = h*T, P = c => pal(world, c), sh = world === 'shadow';
+  const crack = () => { if (sh) { g.strokeStyle = 'rgba(0,0,0,.5)'; g.lineWidth = 1; g.beginPath(); g.moveTo(X + Wd*.3, Y + 1); g.lineTo(X + Wd*.45, Y + Ht*.6); g.lineTo(X + Wd*.38, Y + Ht - 1); g.stroke(); } };
+  g.save();
+  switch (k) {
+    case 'rug':
+      g.fillStyle = P('#7a2430'); g.fillRect(X + 4, Y + 4, Wd - 8, Ht - 8);
+      g.strokeStyle = P('#d6b25e'); g.lineWidth = 2; g.strokeRect(X + 8, Y + 8, Wd - 16, Ht - 16);
+      g.fillStyle = P('#a23a3e'); g.beginPath(); g.moveTo(X + Wd/2, Y + 12); g.lineTo(X + Wd - 16, Y + Ht/2); g.lineTo(X + Wd/2, Y + Ht - 12); g.lineTo(X + 16, Y + Ht/2); g.closePath(); g.fill();
+      if (sh) { g.fillStyle = '#121016'; g.beginPath(); g.moveTo(X + Wd - 4, Y + Ht - 4); g.lineTo(X + Wd - 26, Y + Ht - 4); g.lineTo(X + Wd - 4, Y + Ht - 22); g.closePath(); g.fill(); }
+      break;
+    case 'desk': case 'wdesk': case 'ktable':
+      g.fillStyle = P(k === 'ktable' ? '#8b6a43' : '#6b4226'); rr(g, X + 2, Y + 3, Wd - 4, Ht - 6, 2); g.fill();
+      g.fillStyle = P('#86552f'); g.fillRect(X + 3, Y + 4, Wd - 6, 3);
+      if (k !== 'ktable') { g.fillStyle = P('#efe6d2'); g.fillRect(X + 8, Y + 9, 8, 6); g.fillRect(X + 18, Y + 8, 7, 7); g.fillStyle = P('#e1b54a'); ell(g, X + Wd - 9, Y + 11, 3.5, 3.5); g.fill(); }
+      crack(); break;
+    case 'shelf': case 'lshelf': case 'pshelf':
+      g.fillStyle = P('#4a2e1a'); g.fillRect(X + 1, Y + 1, Wd - 2, Ht - 4);
+      for (let i = X + 3; i < X + Wd - 4; i += 4) {
+        const c = k === 'lshelf' ? ['#f2efe6','#e6e1d4','#dcd5c4'][(i/4) % 3 | 0] : k === 'pshelf' ? ['#c9c3b3','#8a9aa6','#b9774c'][(i/4) % 3 | 0] : ['#7a2430','#2f5a4f','#c49a42','#3a4a7a'][(i/4) % 4 | 0];
+        g.fillStyle = P(c); if (!sh || hash(i, y, 1) > .35) g.fillRect(i, Y + 4 + (hash(i, y) * 3 | 0), 3, Ht - 10);
+      } break;
+    case 'armchair': case 'sofa':
+      g.fillStyle = P(k === 'sofa' ? '#2f6b4f' : '#7a2430'); rr(g, X + 2, Y + 3, Wd - 4, Ht - 5, 5); g.fill();
+      g.fillStyle = P(k === 'sofa' ? '#3d8562' : '#943340'); rr(g, X + 5, Y + 8, Wd - 10, Ht - 12, 3); g.fill();
+      if (sh) { g.fillStyle = '#d8d0b8'; g.fillRect(X + Wd/2, Y + 9, 4, 3); } break;
+    case 'stage':
+      g.fillStyle = P('#3a1a22'); g.fillRect(X, Y, Wd, Ht);
+      g.fillStyle = P('#d6b25e'); g.fillRect(X, Y + Ht - 3, Wd, 3);
+      g.fillStyle = P('#8e1c2c'); for (let i = 0; i < Wd; i += 8) g.fillRect(X + i, Y, 6, 7);
+      if (sh) { g.fillStyle = '#0d0b10'; g.fillRect(X + 30, Y + 18, 14, 9); } break;
+    case 'piano':
+      g.save(); if (sh) { g.translate(X + Wd/2, Y + Ht/2); g.rotate(.12); g.translate(-X - Wd/2, -Y - Ht/2); }
+      g.fillStyle = P('#141214'); rr(g, X + 2, Y + 4, Wd - 4, Ht - 6, 6); g.fill();
+      g.fillStyle = P('#f4f0e6'); g.fillRect(X + 4, Y + Ht - 10, Wd - 8, 5);
+      g.fillStyle = P('#141214'); for (let i = X + 6; i < X + Wd - 6; i += 4) if (!sh || hash(i, 3) > .3) g.fillRect(i, Y + Ht - 10, 2, 3);
+      g.restore(); break;
+    case 'table': case 'cardtable':
+      g.fillStyle = 'rgba(0,0,0,.25)'; ell(g, X + 13, Y + 14, 11, 9); g.fill();
+      g.fillStyle = P(k === 'cardtable' ? '#2b6a45' : '#f1ece0'); ell(g, X + 12, Y + 12, 10, 9); g.fill();
+      if (k === 'cardtable') { g.fillStyle = P('#f4f0e6'); g.fillRect(X + 7, Y + 9, 4, 6); g.fillRect(X + 13, Y + 8, 4, 6); }
+      else { g.fillStyle = P('#d6b25e'); ell(g, X + 12, Y + 12, 2.5, 2.5); g.fill(); }
+      if (sh && k === 'table') { g.fillStyle = 'rgba(70,50,50,.6)'; ell(g, X + 15, Y + 14, 4, 3); g.fill(); }
+      break;
+    case 'chandelier':
+      if (!sh) { g.strokeStyle = 'rgba(241,213,140,.45)'; g.lineWidth = 2; ell(g, X + Wd/2, Y + Ht/2, 18, 14); g.stroke(); ell(g, X + Wd/2, Y + Ht/2, 9, 7); g.stroke();
+                 g.fillStyle = 'rgba(255,230,160,.65)'; for (let i = 0; i < 8; i++) { ell(g, X + Wd/2 + Math.cos(i*Math.PI/4)*18, Y + Ht/2 + Math.sin(i*Math.PI/4)*14, 2, 2); g.fill(); } }
+      else { g.strokeStyle = '#8c7a50'; g.lineWidth = 1.5; ell(g, X + Wd/2 + 3, Y + Ht/2 + 2, 16, 11); g.stroke(); }
+      break;
+    case 'plant':
+      g.fillStyle = P('#9a5638'); ell(g, X + 12, Y + 16, 6, 5); g.fill();
+      for (let i = 0; i < 6; i++) { g.fillStyle = sh ? (i % 2 ? '#4a4434' : '#3b382d') : (i % 2 ? '#3f7a44' : '#2f6538'); ell(g, X + 12 + Math.cos(i)*6, Y + 10 + Math.sin(i*1.7)*4, sh ? 3 : 5, sh ? 2 : 3.5); g.fill(); }
+      break;
+    case 'bench':
+      g.fillStyle = P('#7a5a3a'); g.fillRect(X + 2, Y + 7, Wd - 4, 10); g.fillStyle = P('#5c4129'); for (let i = X + 4; i < X + Wd - 4; i += 6) g.fillRect(i, Y + 7, 1, 10); crack(); break;
+    case 'fountain':
+      g.fillStyle = P('#9d9a90'); ell(g, X + Wd/2, Y + Ht/2, Wd/2 - 2, Ht/2 - 3); g.fill();
+      g.fillStyle = sh ? '#2c2a26' : '#4f8fa0'; ell(g, X + Wd/2, Y + Ht/2, Wd/2 - 7, Ht/2 - 8); g.fill();
+      g.fillStyle = P('#b9b5a8'); ell(g, X + Wd/2, Y + Ht/2, 4, 4); g.fill(); crack(); break;
+    case 'bed': case 'cot':
+      g.fillStyle = P('#5a3a24'); g.fillRect(X + 2, Y + 2, Wd - 4, Ht - 4);
+      g.fillStyle = P(k === 'cot' ? '#e8ece6' : '#f1ece0'); g.fillRect(X + 4, Y + 4, k === 'cot' ? Wd - 8 : Wd - 8, k === 'cot' ? Ht - 8 : 10);
+      if (k === 'bed') { g.fillStyle = P(x > 30 ? '#1e6062' : '#24315c'); g.fillRect(X + 4, Y + 15, Wd - 8, Ht - 19); }
+      if (sh) { g.fillStyle = 'rgba(60,40,40,.5)'; ell(g, X + Wd*.6, Y + Ht*.6, 7, 5); g.fill(); }
+      break;
+    case 'trunk':
+      g.fillStyle = P('#5b3a1e'); g.fillRect(X + 3, Y + 5, Wd - 6, Ht - 9); g.fillStyle = P('#c79a3e'); g.fillRect(X + 3, Y + 9, Wd - 6, 2); g.fillRect(X + 10, Y + 5, 3, Ht - 9); break;
+    case 'cabinet':
+      g.fillStyle = P('#e6e6de'); g.fillRect(X + 1, Y + 1, Wd - 2, Ht - 4);
+      g.fillStyle = sh ? 'rgba(120,130,150,.3)' : 'rgba(160,200,220,.45)'; g.fillRect(X + 4, Y + 3, Wd - 8, Ht - 9);
+      g.fillStyle = P('#7a4a22'); for (let i = 0; i < 6; i++) g.fillRect(X + 7 + i*6, Y + 6, 3, 8);
+      if (sh) { g.strokeStyle = '#ddd'; g.lineWidth = .7; g.beginPath(); g.moveTo(X + 10, Y + 3); g.lineTo(X + 18, Y + 12); g.lineTo(X + 30, Y + 5); g.stroke(); }
+      break;
+    case 'clock':
+      g.fillStyle = P('#4a2a16'); g.fillRect(X + 5, Y + 1, 14, 21);
+      g.fillStyle = P('#efe6d2'); ell(g, X + 12, Y + 8, 5, 5); g.fill();
+      g.strokeStyle = P('#222'); g.lineWidth = 1; g.beginPath(); g.moveTo(X + 12, Y + 8); g.lineTo(X + 12, Y + 4.5); g.moveTo(X + 12, Y + 8); g.lineTo(X + 15, Y + 9); g.stroke();
+      g.fillStyle = P('#d6b25e'); ell(g, X + 12, Y + 17, 2.5, 2.5); g.fill(); break;
+    case 'reception': case 'barcounter': case 'counter':
+      g.fillStyle = P(k === 'counter' ? '#9aa1a3' : '#4a2616'); g.fillRect(X, Y + 3, Wd, Ht - 6);
+      g.fillStyle = P(k === 'counter' ? '#c4cacb' : '#d6b25e'); g.fillRect(X, Y + 3, Wd, 2);
+      if (k === 'barcounter') for (let i = 0; i < 12; i++) { g.fillStyle = P(['#3d7a4a','#7a2430','#c49a42','#d8d4c8'][i % 4]); if (!sh || hash(i, 9) > .4) g.fillRect(X + 6 + i*13, Y - 9, 4, 8); }
+      if (k === 'reception') { g.fillStyle = P('#d6b25e'); ell(g, X + 20, Y + 11, 3, 2.5); g.fill(); g.fillStyle = P('#efe6d2'); g.fillRect(X + 70, Y + 8, 14, 9); }
+      crack(); break;
+    case 'stove':
+      g.fillStyle = P('#26282b'); g.fillRect(X + 1, Y + 1, Wd - 2, Ht - 4);
+      g.fillStyle = sh ? '#1b1c1f' : '#3a3d42'; for (let i = 0; i < 3; i++) { ell(g, X + 12 + i*24, Y + 10, 6, 6); g.fill(); }
+      if (!sh) { g.fillStyle = 'rgba(255,140,60,.5)'; ell(g, X + 36, Y + 10, 3, 3); g.fill(); } break;
+    case 'crates':
+      for (let i = 0; i < 3; i++) { g.fillStyle = P('#8b6a43'); g.fillRect(X + (i % 2)*20 + 2, Y + (i > 1 ? 22 : 2), 18, 18); g.strokeStyle = P('#5a3f22'); g.strokeRect(X + (i % 2)*20 + 2, Y + (i > 1 ? 22 : 2), 18, 18); }
+      break;
+    case 'rack':
+      g.fillStyle = P('#3a2414'); g.fillRect(X, Y, Wd, Ht);
+      for (let i = X + 4; i < X + Wd - 2; i += 6) for (let j = Y + 4; j < Y + Ht - 2; j += 6) { g.fillStyle = sh ? (hash(i, j) < .5 ? '#1a1418' : '#3a1a24') : '#5a1626'; ell(g, i, j, 2, 2); g.fill(); }
+      break;
+    case 'barrel':
+      g.fillStyle = P('#6b4424'); ell(g, X + 12, Y + 12, 10, 10); g.fill(); g.strokeStyle = P('#2f2f2f'); g.lineWidth = 1.5; ell(g, X + 12, Y + 12, 7, 7); g.stroke(); break;
+    case 'stairs':
+      for (let i = 0; i < 5; i++) { g.fillStyle = P(i % 2 ? '#6d655a' : '#7d7468'); g.fillRect(X, Y + i*5 - 2, T, 5); }
+      break;
+    case 'nightstand':
+      g.fillStyle = P('#5a3a24'); g.fillRect(X + 3, Y + 3, Wd - 6, Ht - 6); g.fillStyle = P('#e1b54a'); ell(g, X + 8, Y + 9, 3, 3); g.fill(); break;
+    case 'wardrobe':
+      g.fillStyle = P('#4a2e1a'); g.fillRect(X + 1, Y + 1, Wd - 2, Ht - 6); g.fillStyle = P('#d6b25e'); g.fillRect(X + Wd/2 - 2, Y + 7, 1.5, 5); g.fillRect(X + Wd/2 + 1, Y + 7, 1.5, 5); crack(); break;
+    case 'basket':
+      g.fillStyle = P('#a3824f'); ell(g, X + 12, Y + 13, 9, 7); g.fill(); g.fillStyle = P('#f2efe6'); ell(g, X + 12, Y + 11, 6, 4); g.fill(); break;
+  }
+  g.restore();
+}
+
+function buildLayer(world) {
+  const c = document.createElement('canvas'); c.width = W*T*2; c.height = H*T*2;
+  const g = c.getContext('2d'); g.scale(2, 2);
+  g.fillStyle = world === 'sun' ? '#0a1615' : '#07070a'; g.fillRect(0, 0, W*T, H*T);
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+    const ch = grid[y][x];
+    if (ch === '.' || ch === 'r') floorTile(g, x, y, roomGrid[y][x], world);
+    else if (ch === '#') wallTile(g, x, y, world);
+    else doorTile(g, x, y, ch, world);
+  }
+  for (const f of FURN) furniture(g, f[0], f[1], f[2], f[3], f[4], world);
+  if (world === 'shadow') for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) if (grid[y][x] === 'r') rubbleTile(g, x, y);
+  // room names, set into the floor
+  g.textAlign = 'center'; g.textBaseline = 'middle';
+  for (const R of Object.values(ROOMS)) {
+    if (R.n === 'Grand Hall') continue;
+    const [x0, , x1, y1] = R.r;
+    g.font = '11px Limelight, Georgia, serif';
+    g.fillStyle = world === 'sun' ? 'rgba(214,178,94,.55)' : 'rgba(180,168,234,.35)';
+    const label = world === 'sun' ? R.n.toUpperCase() : R.n.toUpperCase().split('').map((ch, i) => hash(i, x0) < .18 ? ' ' : ch).join('');
+    g.fillText(label, (x0 + x1 + 1) / 2 * T, (y1 + 1) * T - 7);
+  }
+  return c;
+}
+
+// ---- people
+function drawPerson(g, x, y, L, shadow, o) {
+  const bob = o.moving ? Math.abs(Math.sin(o.phase || 0)) * 1.6 : 0;
+  g.save(); g.translate(x, y);
+  if (o.dead) { g.rotate(Math.PI / 2); g.translate(2, 0); }
+  if (o.alpha != null) g.globalAlpha = o.alpha;
+  g.fillStyle = 'rgba(0,0,0,.32)'; ell(g, 0, 8, 7.5, 2.8); g.fill();
+  g.translate(0, -bob);
+  const C = c => shadow ? shade(c) : c;
+  // body
+  g.fillStyle = C(L.body);
+  g.beginPath(); g.moveTo(-4.5, -3); g.lineTo(4.5, -3);
+  const longSkirt = ['cel', 'ash', 'fen'].includes(Object.keys(LOOKS).find(k => LOOKS[k] === L));
+  const hw = longSkirt ? 7.5 : 6;
+  g.lineTo(hw, 8);
+  if (shadow) for (let i = 4; i >= -4; i--) g.lineTo(i * hw / 4, 8 - (i % 2 ? 2.5 : 0)); else g.lineTo(-hw, 8);
+  g.closePath(); g.fill();
+  // trim / accessories on body
+  g.fillStyle = C(L.trim);
+  if (L.acc === 'apron') g.fillRect(-3, -1, 6, 8);
+  else if (L.acc === 'buttons') { for (let i = 0; i < 3; i++) { ell(g, 0, -1 + i*3, .9, .9); g.fill(); } g.fillRect(-5, 6, 10, 1.2); }
+  else if (L.acc === 'pearls') { for (let i = -2; i <= 2; i++) { ell(g, i*1.3, -2.2 + Math.abs(i)*-.3, .7, .7); g.fill(); } }
+  else { g.beginPath(); g.moveTo(-1.6, -3); g.lineTo(0, 2); g.lineTo(1.6, -3); g.closePath(); g.fill(); }
+  if (L.acc === 'cane') { g.strokeStyle = C('#3a2414'); g.lineWidth = 1.3; g.beginPath(); g.moveTo(6, -1); g.lineTo(7.5, 8.5); g.stroke(); }
+  // head
+  g.fillStyle = shadow ? shade(L.skin) : L.skin; ell(g, 0, -7.5, 4.6, 4.8); g.fill();
+  g.fillStyle = C(L.hair);
+  switch (L.style) {
+    case 'white': ell(g, 0, -10.5, 4.4, 2.2); g.fill(); ell(g, -4, -8, 1.4, 2.4); g.fill(); ell(g, 4, -8, 1.4, 2.4); g.fill(); break;
+    case 'bob': g.beginPath(); g.arc(0, -8, 5.3, Math.PI, 0); g.lineTo(5.3, -5); g.lineTo(3.2, -5.5); g.lineTo(3, -9); g.lineTo(-3, -9); g.lineTo(-3.2, -5.5); g.lineTo(-5.3, -5); g.closePath(); g.fill(); break;
+    case 'short': g.beginPath(); g.arc(0, -8.4, 4.8, Math.PI, 0); g.closePath(); g.fill(); break;
+    case 'bun': g.beginPath(); g.arc(0, -8.4, 4.8, Math.PI, 0); g.closePath(); g.fill(); ell(g, 0, -13, 2.6, 2.3); g.fill(); break;
+    case 'cap': g.fillStyle = C('#b0302a'); g.fillRect(-3.4, -14, 6.8, 4); g.fillStyle = C('#e0b84a'); g.fillRect(-3.4, -10.6, 6.8, 1.2); break;
+    case 'wave': g.beginPath(); g.arc(0, -8.2, 5.2, Math.PI*.95, Math.PI*.05); g.quadraticCurveTo(6, -4, 3.5, -4.5); g.lineTo(3, -9); g.lineTo(-3, -9.5); g.quadraticCurveTo(-6, -5, -5, -7); g.closePath(); g.fill(); break;
+  }
+  if (L.acc === 'feather') { g.strokeStyle = C('#e8f0e0'); g.lineWidth = 1.4; g.beginPath(); g.moveTo(3, -11); g.quadraticCurveTo(8, -16, 6, -19); g.stroke(); }
+  if (L.acc === 'glasses') { g.strokeStyle = C('#1a1a1a'); g.lineWidth = .8; ell(g, -1.8, -7.3, 1.4, 1.2); g.stroke(); ell(g, 1.8, -7.3, 1.4, 1.2); g.stroke(); }
+  // eyes
+  if (shadow) { g.fillStyle = '#0b0a10'; ell(g, -1.7, -7.2, 1.3, 1.5); g.fill(); ell(g, 1.7, -7.2, 1.3, 1.5); g.fill(); }
+  else if (!o.dead) { g.fillStyle = '#20160f'; ell(g, -1.6, -7.2, .6, .7); g.fill(); ell(g, 1.6, -7.2, .6, .7); g.fill(); }
+  g.restore();
+}
+function drawPlayer(g, p, shadow, ts) {
+  const bob = p.moving ? Math.abs(Math.sin(p.phase)) * 1.6 : 0;
+  const x = p.x*T, y = p.y*T;
+  g.save(); g.translate(x, y);
+  // lantern glow
+  const grd = g.createRadialGradient(5*p.face, 0, 1, 5*p.face, 0, 22);
+  grd.addColorStop(0, shadow ? 'rgba(180,168,234,.35)' : 'rgba(255,214,120,.35)'); grd.addColorStop(1, 'rgba(0,0,0,0)');
+  g.fillStyle = grd; ell(g, 5*p.face, 0, 22, 22); g.fill();
+  g.fillStyle = 'rgba(0,0,0,.35)'; ell(g, 0, 8, 7, 2.6); g.fill();
+  g.translate(0, -bob);
+  g.globalAlpha = shadow ? .82 : 1;
+  g.fillStyle = shadow ? '#c9c4e6' : '#2b3550';
+  g.beginPath(); g.moveTo(-4, -4); g.lineTo(4, -4); g.lineTo(6.5, 8); g.lineTo(-6.5, 8); g.closePath(); g.fill();
+  g.fillStyle = shadow ? '#e8e4f8' : '#e6c39f'; ell(g, 0, -8, 4.4, 4.6); g.fill();
+  g.fillStyle = shadow ? '#a39dc6' : '#1c2238'; g.beginPath(); g.arc(0, -8.6, 5, Math.PI*1.02, -.02); g.lineTo(5.6, -7); g.lineTo(-5.6, -7); g.closePath(); g.fill();
+  g.fillRect(-6, -10, 12, 1.6);
+  // lantern
+  g.strokeStyle = shadow ? '#d9d4f2' : '#5a4a2a'; g.lineWidth = 1; g.beginPath(); g.moveTo(5.5*p.face, -1); g.lineTo(6.5*p.face, 2); g.stroke();
+  g.fillStyle = shadow ? '#ece8ff' : '#ffd77a'; rr(g, 6.5*p.face - 2, 2, 4, 5, 1); g.fill();
+  g.restore();
+}
+
+function bubble(g, x, y, b) {
+  g.save();
+  g.font = (b.action || b.whisper ? 'italic ' : '') + '10.5px Spectral, Georgia, serif';
+  const maxW = 190, words = b.text.split(' '), lines = []; let cur = '';
+  for (const w of words) { const t2 = cur ? cur + ' ' + w : w; if (g.measureText(t2).width > maxW && cur) { lines.push(cur); cur = w; } else cur = t2; }
+  lines.push(cur);
+  const lh = 13, bw = Math.max(...lines.map(l => g.measureText(l).width)) + 14, bh = lines.length * lh + 9;
+  let bx = Math.max(view.cx + 4, Math.min(x - bw/2, view.cx + view.vw - bw - 4)), by = Math.max(view.cy + 4, y - 26 - bh);
+  const fade = Math.min(1, (b.until - performance.now()) / 500);
+  g.globalAlpha = Math.max(0, fade);
+  g.fillStyle = b.whisper ? 'rgba(28,22,44,.92)' : b.action ? 'rgba(12,14,14,.88)' : 'rgba(250,244,230,.96)';
+  g.strokeStyle = b.whisper ? '#7a6fb0' : b.action ? '#555' : '#c9a24a';
+  rr(g, bx, by, bw, bh, 5); g.fill(); g.lineWidth = 1; g.stroke();
+  if (!b.action) { g.beginPath(); g.moveTo(x - 4, by + bh); g.lineTo(x, by + bh + 6); g.lineTo(x + 4, by + bh); g.closePath(); g.fill(); }
+  g.fillStyle = b.whisper ? '#d2c9f5' : b.action ? '#cfcac0' : '#2a2018';
+  g.textBaseline = 'top';
+  lines.forEach((l, i) => g.fillText(l, bx + 7, by + 5 + i*lh));
+  g.restore();
+}
+
+function drawObjects(g, ts) {
+  const sh = S.world === 'shadow';
+  for (const o of OBJECTS) {
+    if (!objVisible(o)) continue;
+    const X = o.x*T, Y = o.y*T;
+    if (o.draw === 'note') { g.fillStyle = sh ? '#8d8670' : '#f4ecd4'; g.save(); g.translate(X + 12, Y + 13); g.rotate(-.2); g.fillRect(-5, -4, 10, 7); g.restore(); }
+    if (o.draw === 'glass') {
+      g.save(); g.translate(X + 12, Y + 14);
+      if (sh && S.glass.poisoned) { const gl = g.createRadialGradient(0, -3, 1, 0, -3, 12); gl.addColorStop(0, 'rgba(120,60,160,.6)'); gl.addColorStop(1, 'rgba(0,0,0,0)'); g.fillStyle = gl; ell(g, 0, -3, 12, 12); g.fill(); }
+      g.fillStyle = sh ? '#8a8a96' : '#e8e8f0'; g.beginPath(); g.moveTo(-4, -8); g.lineTo(4, -8); g.lineTo(1.2, -1); g.lineTo(1, 4); g.lineTo(3.5, 5); g.lineTo(-3.5, 5); g.lineTo(-1, 4); g.lineTo(-1.2, -1); g.closePath(); g.fill();
+      g.fillStyle = sh && S.glass.poisoned ? '#120818' : 'rgba(160,190,220,.6)'; g.beginPath(); g.moveTo(-3, -7); g.lineTo(3, -7); g.lineTo(1, -2); g.lineTo(-1, -2); g.closePath(); g.fill();
+      g.fillStyle = '#d6d6e0'; g.fillRect(-4, -9, 8, 1.5);
+      g.restore();
+    }
+    if (o.draw === 'case') { g.fillStyle = sh ? '#3a4a40' : '#2c6a4c'; g.fillRect(X + 4, Y + 8, 16, 11); g.fillStyle = sh ? '#7a7466' : '#efe6d2'; g.fillRect(X + 6, Y + 6, 12, 4); }
+    if (o.draw === 'stain') {
+      const pulse = .55 + .2 * Math.sin(ts * 2 + o.x);
+      g.fillStyle = `rgba(90,20,40,${pulse})`; ell(g, X + 12, Y + 12, o.id === 'stain_toast' ? 13 : 9, o.id === 'stain_toast' ? 7 : 5); g.fill();
+      g.fillStyle = `rgba(30,5,15,${pulse})`; ell(g, X + 10, Y + 11, 6, 3.5); g.fill();
+    }
+    // glint marking things you can examine
+    if (dist(S.player, {x: o.x + .5, y: o.y + .5}) < 4) {
+      const a = .4 + .4 * Math.sin(ts * 4 + o.x * 3);
+      g.fillStyle = sh ? `rgba(200,190,250,${a})` : `rgba(255,232,160,${a})`;
+      g.save(); g.translate(X + 19, Y + 4); g.rotate(Math.PI/4); g.fillRect(-1.6, -1.6, 3.2, 3.2); g.restore();
+    }
+  }
+}
+
+function resize() {
+  const r = cv.getBoundingClientRect(), dpr = Math.min(2, window.devicePixelRatio || 1);
+  cv.width = Math.max(1, Math.round(r.width * dpr)); cv.height = Math.max(1, Math.round(r.height * dpr));
+  view.dpr = dpr; view.cssW = r.width; view.cssH = r.height;
+}
+function computeCamera() {
+  const mw = W*T, mh = H*T, fit = Math.min(view.cssW / mw, view.cssH / mh);
+  view.scale = overview ? fit : Math.max(fit, view.cssW < 700 ? 1.35 : 1.75);
+  view.vw = view.cssW / view.scale; view.vh = view.cssH / view.scale;
+  const px = S.player.x*T, py = S.player.y*T;
+  view.cx = view.vw >= mw ? -(view.vw - mw) / 2 : Math.max(0, Math.min(mw - view.vw, px - view.vw / 2));
+  view.cy = view.vh >= mh ? -(view.vh - mh) / 2 : Math.max(0, Math.min(mh - view.vh, py - view.vh / 2));
+}
+
+function render(ts) {
+  const g = ctx;
+  g.setTransform(1, 0, 0, 1, 0, 0);
+  g.fillStyle = S.world === 'sun' ? '#0a1615' : '#07070a'; g.fillRect(0, 0, cv.width, cv.height);
+  if (!layers.sun) return;
+  computeCamera();
+  const k = view.dpr * view.scale;
+  g.setTransform(k, 0, 0, k, -view.cx * k, -view.cy * k);
+  g.imageSmoothingEnabled = true;
+  const now = performance.now(), sh = S.world === 'shadow';
+  g.drawImage(layers[S.world], 0, 0, W*T, H*T);
+  if (S.trans) {
+    const prog = (now - S.trans.start) / 550;
+    if (prog >= 1) S.trans = null;
+    else {
+      const R = prog * prog * 900;
+      g.save(); g.beginPath(); g.rect(view.cx, view.cy, view.vw, view.vh); g.arc(S.player.x*T, S.player.y*T, R, 0, Math.PI*2, true); g.clip('evenodd');
+      g.drawImage(layers[S.trans.from], 0, 0, W*T, H*T); g.restore();
+      g.strokeStyle = sh ? 'rgba(180,168,234,.7)' : 'rgba(255,220,140,.7)'; g.lineWidth = 2; g.beginPath(); g.arc(S.player.x*T, S.player.y*T, R, 0, Math.PI*2); g.stroke();
+    }
+  }
+  drawObjects(g, ts);
+  // people, sorted by depth
+  const drawables = Object.values(S.npcs).map(n => ({y: n.y, f: () => drawPerson(g, n.x*T, n.y*T, LOOKS[n.id], sh, {moving: n.moving, phase: n.phase, dead: n.dead, alpha: sh ? .88 : 1})}));
+  drawables.push({y: S.player.y, f: () => drawPlayer(g, S.player, sh, ts)});
+  drawables.sort((a, b) => a.y - b.y).forEach(d => d.f());
+  // light
+  const px = S.player.x*T, py = S.player.y*T;
+  const grd = g.createRadialGradient(px, py, T*(sh ? 2.5 : 6), px, py, T*(sh ? 10 : 22));
+  grd.addColorStop(0, 'rgba(0,0,0,0)');
+  grd.addColorStop(1, sh ? 'rgba(6,5,12,.74)' : 'rgba(12,8,0,.28)');
+  g.fillStyle = grd; g.fillRect(view.cx, view.cy, view.vw, view.vh);
+  if (sh) {
+    for (const n of Object.values(S.npcs)) if (!n.dead) {   // eyes catch the light in the dark
+      g.fillStyle = 'rgba(210,200,255,.75)';
+      ell(g, n.x*T - 1.7, n.y*T - 7.2 - (n.moving ? Math.abs(Math.sin(n.phase)) * 1.6 : 0), .7, .7); g.fill();
+      ell(g, n.x*T + 1.7, n.y*T - 7.2 - (n.moving ? Math.abs(Math.sin(n.phase)) * 1.6 : 0), .7, .7); g.fill();
+    }
+    for (let i = 0; i < 26; i++) {                           // drifting dust
+      const dx = (hash(i, 1) * view.vw + ts * 6 * (hash(i, 2) - .3)) % view.vw, dy = (hash(i, 3) * view.vh + ts * 9 * hash(i, 4)) % view.vh;
+      g.fillStyle = `rgba(200,195,230,${.12 + .12 * Math.sin(ts + i)})`; g.fillRect(view.cx + (dx + view.vw) % view.vw, view.cy + (dy + view.vh) % view.vh, 1.4, 1.4);
+    }
+  }
+  // names
+  g.font = '9px Spectral, Georgia, serif'; g.textAlign = 'center'; g.textBaseline = 'top';
+  for (const n of Object.values(S.npcs)) {
+    if (dist(n, S.player) > 6) continue;
+    const label = LOOKS[n.id].name.replace('Lady Imogen ', 'Lady ').replace('Mrs. Odile ', 'Mrs. ').replace('Dr. Felix ', 'Dr. ');
+    g.fillStyle = 'rgba(0,0,0,.55)'; g.fillText(label, n.x*T + .6, n.y*T + 10.6);
+    g.fillStyle = sh ? 'rgba(210,202,245,.85)' : 'rgba(245,232,200,.95)'; g.fillText(label, n.x*T, n.y*T + 10);
+  }
+  // bubbles
+  S.bubbles = S.bubbles.filter(b => b.until > now);
+  for (const b of S.bubbles) { const n = npc(b.who); bubble(g, n.x*T, n.y*T, b); }
+  if (S.paused) { g.setTransform(1, 0, 0, 1, 0, 0); }
+}
+
+function frame(now) {
+  const dt = Math.min(.05, (now - last) / 1000); last = now;
+  if (S && document.getElementById('titleScreen').hidden && !modalOpen()) update(dt);
+  if (S) { render(now / 1000); renderHud(); renderPrompt(); }
+  requestAnimationFrame(frame);
+}
+
+// ============================================================ input
+const KEYMAP = {ArrowUp:'up', w:'up', W:'up', ArrowDown:'down', s:'down', S:'down', ArrowLeft:'left', a:'left', A:'left', ArrowRight:'right', d:'right', D:'right', t:'t', T:'t'};
+window.addEventListener('keydown', e => {
+  if (e.metaKey || e.ctrlKey || e.altKey) return;
+  const dlgOpen = !document.getElementById('dialog').hidden, jOpen = !document.getElementById('journal').hidden;
+  if (e.key === 'Escape') { if (dlgOpen) closeDialog(); if (jOpen) hide('journal'); return; }
+  if (dlgOpen) {
+    if (/^[1-9]$/.test(e.key)) { const b = document.getElementById('dlgOpts').children[+e.key - 1]; if (b) { e.preventDefault(); b.click(); } }
+    if (e.key === 'e' || e.key === 'E') { e.preventDefault(); closeDialog(); }
+    return;
+  }
+  if (!document.getElementById('titleScreen').hidden || !document.getElementById('midnight').hidden) return;
+  if (e.key === 'j' || e.key === 'J') { e.preventDefault(); jOpen ? hide('journal') : openJournal(); return; }
+  if (jOpen) return;
+  if (KEYMAP[e.key]) { keys[KEYMAP[e.key]] = true; e.preventDefault(); }
+  if (e.key === ' ' || e.key === 'q' || e.key === 'Q') { e.preventDefault(); if (!e.repeat) switchWorld(); }
+  if ((e.key === 'e' || e.key === 'E' || e.key === 'Enter') && !e.repeat) { e.preventDefault(); interactWith(nearest()); }
+  if ((e.key === 'f' || e.key === 'F') && !e.repeat) hurryToggle = !hurryToggle;
+  if ((e.key === 'm' || e.key === 'M') && !e.repeat) overview = !overview;
+});
+window.addEventListener('keyup', e => { if (KEYMAP[e.key]) keys[KEYMAP[e.key]] = false; });
+window.addEventListener('blur', () => { for (const k in keys) keys[k] = false; });
+
+cv.addEventListener('pointerdown', e => {
+  if (modalOpen() || S.ended) return;
+  const r = cv.getBoundingClientRect();
+  const lx = (e.clientX - r.left) / view.scale + view.cx, ly = (e.clientY - r.top) / view.scale + view.cy;
+  const tx = lx / T, ty = ly / T;
+  // clicked a person or object?
+  let hit = null, hd = .9;
+  for (const tg of targets()) { const d = Math.hypot(tg.x - tx, tg.y - (ty + (tg.kind === 'npc' ? .25 : 0))); if (d < hd) { hd = d; hit = tg; } }
+  const p = S.player;
+  if (hit && dist(p, hit) <= REACH) { interactWith(hit); return; }
+  let gx = Math.floor(tx), gy = Math.floor(ty);
+  if (hit) {   // walk to the nearest standable tile beside it
+    let best = null, bd = 1e9;
+    for (let dy = -2; dy <= 2; dy++) for (let dx = -2; dx <= 2; dx++) {
+      const cx = Math.floor(hit.x) + dx, cy = Math.floor(hit.y) + dy;
+      if (!passable(cx, cy, S.world) || Math.hypot(cx + .5 - hit.x, cy + .5 - hit.y) > REACH - .1) continue;
+      const d = Math.hypot(cx + .5 - p.x, cy + .5 - p.y); if (d < bd) { bd = d; best = [cx, cy]; }
+    }
+    if (best) [gx, gy] = best;
+  }
+  const path = bfs(Math.floor(p.x), Math.floor(p.y), gx, gy, (x, y) => passable(x, y, S.world));
+  if (path) { p.path = path; p.pending = hit; }
+  else if (!passable(gx, gy, S.world)) toast(S.world === 'shadow' && passable(gx, gy, 'sun') ? 'Rubble blocks that way in the Shadow.' : "You can't get there from here.");
+});
+
+document.getElementById('worldBtn').onclick = switchWorld;
+document.getElementById('ffBtn').onclick = () => { hurryToggle = !hurryToggle; };
+document.getElementById('mapBtn').onclick = () => { overview = !overview; };
+document.getElementById('journalBtn').onclick = openJournal;
+document.getElementById('tE').onclick = () => interactWith(nearest());
+document.getElementById('tW').onclick = switchWorld;
+document.getElementById('tF').onclick = () => { hurryToggle = !hurryToggle; };
+document.getElementById('jClose').onclick = () => hide('journal');
+document.getElementById('jRewind').onclick = () => { hide('journal'); P.loop++; save(); startNight(); toast('You close your eyes, and the hotel rolls back to eight o\'clock.'); };
+document.getElementById('jForget').onclick = e => {
+  const b = e.currentTarget;
+  if (b.dataset.armed) { P = freshSave(); save(); hide('journal'); startNight(); b.textContent = 'Forget everything'; delete b.dataset.armed; }
+  else { b.dataset.armed = '1'; b.textContent = 'Click again to erase all clues'; setTimeout(() => { b.textContent = 'Forget everything'; delete b.dataset.armed; }, 3500); }
+};
+document.querySelectorAll('.tabs button').forEach(b => b.onclick = () => { jTab = b.dataset.tab; renderJournal(); });
+
+// ============================================================ boot
+function startNight() {
+  newNight();
+  document.body.classList.remove('shadow');
+  const b = document.getElementById('worldBtn'); b.className = 'sun'; b.textContent = '☀ Sun';
+  hurryToggle = false; lastHud = '';
+  renderLog(); renderInv(); closeDialog();
+  setTimeout(() => toast(P.loop === 1 ? '<b>8:00 PM.</b> You wake in Room 7. There is a note on the nightstand.' : `<b>Night ${P.loop}.</b> 8:00 PM again. You remember everything.`), 300);
+}
+function titleButtons() {
+  const box = document.getElementById('titleButtons'); box.innerHTML = '';
+  const begin = () => { hide('titleScreen'); startNight(); tone(523, .4, 'triangle', .03); };
+  if (Object.keys(P.clues).length) {
+    box.append(btn(`Continue: night ${P.loop}`, 'primary', begin));
+    box.append(btn('Start over', 'danger', () => { P = freshSave(); save(); begin(); }));
+  } else box.append(btn('Check in', 'primary', begin));
+}
+
+newNight(); renderLog();
+resize(); window.addEventListener('resize', resize);
+titleButtons();
+const fontsReady = document.fonts ? Promise.race([document.fonts.ready, new Promise(r => setTimeout(r, 1500))]) : Promise.resolve();
+fontsReady.then(() => { layers.sun = buildLayer('sun'); layers.shadow = buildLayer('shadow'); });
+for (const [k, [x, y]] of Object.entries(SPOTS)) if (!passable(x, y, 'sun', true)) console.warn('spot not walkable', k);
+requestAnimationFrame(frame);
+window.__meridian = {get S() { return S; }, get P() { return P; }, update, midnight, SCHED, SPOTS, roomAt, passable, bfs, switchWorld, interactWith, targets, talkNode, thoughtNode};
+</script>
+</body>
+</html>
